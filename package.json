@@ -6,9 +6,10 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "activationEvents": [
-    "onStartupFinished"
-  ],
+ "activationEvents": [
+  "onStartupFinished",
+  "onView:boundedSidebarView"
+],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
