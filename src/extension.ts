@@ -71,9 +71,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // ── 3. Business layer ─────────────────────────────────────────────────────
-  const modeManager      = new ModeManager(recoveredState.activeMode);
+  // Read mode from VS Code settings — this is where onboarding and toggleMode persist it.
+  const configMode = vscode.workspace.getConfiguration().get<BoundedMode>('bounded.mode', 'Standard');
+  const modeManager      = new ModeManager(configMode);
   // BRI is per-session (FR-03) — always start fresh at 0.
-  // recoveredState.activeMode is restored because the user set it deliberately.
   const briCalculator    = new BRICalculator(0);
   const sessionTracker   = new SessionTracker();
   const reportGenerator  = new ReportGenerator(sessionTracker, briCalculator, modeManager);
@@ -154,9 +155,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     },
 
     // onUndoDetected — a previous external paste was reversed (FR-06)
-    (eventId: string) => {
+    (eventId: string, lineCount: number) => {
       console.log(`Bounded: undo detected — eventId: ${eventId}`);
-      sessionTracker.recordUndo();
+      sessionTracker.recordUndo(lineCount);
       const updatedState = briCalculator.processUndo(eventId);
       alertController.check(updatedState.stateLabel);
       updateStatusBar(
@@ -212,19 +213,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const next: BoundedMode =
       modeManager.getMode() === 'Standard' ? 'Strict' : 'Standard';
     modeManager.setMode(next); // takes effect immediately — NF-07
+    // Persist to VS Code settings so onboarding and toggleMode stay in sync.
+    await vscode.workspace.getConfiguration().update(
+      'bounded.mode', next, vscode.ConfigurationTarget.Global
+    );
     updateStatusBar(statusBar, briCalculator.getCurrentBRI(), briCalculator.getStateLabel(), next);
     const state = currentState();
     await writeBRIState(context, state);
     sidebarPanel.updateState(state);
     vscode.window.showInformationMessage(`Bounded: Mode switched to ${next}.`);
-    // TODO: Phase 7 — push mode change to open dashboard via postMessage
   });
 
   const generateReport = vscode.commands.registerCommand('bounded.generateReport', async () => {
     await DashboardPanel.createOrShow(context, reportGenerator);
   });
 
-  context.subscriptions.push(openDashboard, toggleMode, generateReport, statusBar);
+  // Sync mode changes that originate outside toggleMode (e.g. onboarding completion,
+  // manual settings edit). onDidChangeConfiguration fires whenever bounded.mode changes.
+  const configListener = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('bounded.mode')) {
+      const newMode = vscode.workspace.getConfiguration().get<BoundedMode>('bounded.mode', 'Standard');
+      modeManager.setMode(newMode);
+      updateStatusBar(statusBar, briCalculator.getCurrentBRI(), briCalculator.getStateLabel(), newMode);
+      sidebarPanel.updateState(currentState());
+    }
+  });
+
+  context.subscriptions.push(openDashboard, toggleMode, generateReport, statusBar, configListener);
 }
 
 export function deactivate(): void {

@@ -60,12 +60,16 @@ export function classifyPasteEvent(
   const contentChange = change.contentChanges[0];
   const insertedText = contentChange.text;
 
-  const lineCount = insertedText.split('\n').length;
-
-  if (lineCount < MIN_PASTE_LINES) {
+  if (insertedText.trim() === '') {
     return null;
   }
-  if (insertedText.trim() === '') {
+
+  // Count only non-empty lines — blank lines must not inflate BRI or the threshold.
+  const lineCount = insertedText
+    .split('\n')
+    .filter((l) => l.trim() !== '').length;
+
+  if (lineCount < MIN_PASTE_LINES) {
     return null;
   }
 

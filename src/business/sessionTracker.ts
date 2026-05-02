@@ -38,11 +38,16 @@ export class SessionTracker {
    * Increments the typing streak and updates the longest streak if exceeded.
    * TODO: Phase 4 — wired from EventListener's typing-change detection
    */
-  public recordTyping(linesTyped: number): void {
-    this.snapshot.linesTyped += linesTyped;
-    this.currentTypingStreak += linesTyped;
-    if (this.currentTypingStreak > this.snapshot.longestTypingStreak) {
-      this.snapshot.longestTypingStreak = this.currentTypingStreak;
+  public recordTyping(linesChanged: number): void {
+    if (linesChanged > 0) {
+      this.snapshot.linesTyped     += linesChanged;
+      this.currentTypingStreak     += linesChanged;
+      if (this.currentTypingStreak > this.snapshot.longestTypingStreak) {
+        this.snapshot.longestTypingStreak = this.currentTypingStreak;
+      }
+    } else if (linesChanged < 0) {
+      this.snapshot.linesTyped     = Math.max(0, this.snapshot.linesTyped + linesChanged);
+      this.currentTypingStreak     = Math.max(0, this.currentTypingStreak + linesChanged);
     }
   }
 
@@ -51,8 +56,10 @@ export class SessionTracker {
    * Decrements pasteEventCount, floored at 0.
    * Does not adjust linesTyped or streaks.
    */
-  public recordUndo(): void {
-    this.snapshot.pasteEventCount = Math.max(0, this.snapshot.pasteEventCount - 1);
+  public recordUndo(lineCount: number): void {
+    this.snapshot.pasteEventCount  = Math.max(0, this.snapshot.pasteEventCount - 1);
+    this.snapshot.linesPasted      = Math.max(0, this.snapshot.linesPasted - lineCount);
+    this.snapshot.unmodifiedPastes = Math.max(0, this.snapshot.unmodifiedPastes - 1);
   }
 
   /**

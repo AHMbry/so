@@ -35,7 +35,7 @@ export class EventListenerModule {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly onPasteDetected: (event: BehavioralEvent) => void,
-    private readonly onUndoDetected: (eventId: string) => void,
+    private readonly onUndoDetected: (eventId: string, lineCount: number) => void,
     private readonly onWorkspaceSaved: () => void,
     private readonly onTypingDetected: (linesAdded: number) => void
   ) {}
@@ -70,10 +70,11 @@ export class EventListenerModule {
           );
         } else {
           // Store with its document range so later changes can be matched by position.
-          // lineCount = split('\n').length = newlines + 1, so endLine = start + lineCount - 1.
+          // endLine is derived from the raw text span (all lines including blanks),
+          // not lineCount (which filters blanks for BRI purposes).
           const c0 = e.contentChanges[0];
           const startLine = c0.range.start.line;
-          const endLine   = startLine + pasteEvent.lineCount - 1;
+          const endLine   = startLine + c0.text.split('\n').length - 1;
           this.recentPastes.push({ event: pasteEvent, startLine, endLine });
           if (this.recentPastes.length > RECENT_PASTE_WINDOW) {
             this.recentPastes.shift();
@@ -84,9 +85,12 @@ export class EventListenerModule {
       }
 
       // ── Undo / modification / shift detection ────────────────────────────
-      // Iterate content changes in reverse-index order over recentPastes so that
-      // splicing an entry doesn't corrupt unprocessed indices.
-      for (const c of e.contentChanges) {
+      // consumedByUndo tracks which content-change indices were matched to a
+      // paste so the typing detector below does not double-count them.
+      const consumedByUndo = new Set<number>();
+
+      for (let ci = 0; ci < e.contentChanges.length; ci++) {
+        const c = e.contentChanges[ci];
         const changeStart = c.range.start.line;
         const changeEnd   = c.range.end.line;
         const addedLines  = c.text === '' ? 0 : (c.text.split('\n').length - 1);
@@ -101,7 +105,8 @@ export class EventListenerModule {
           // as well as replacement-undos where text !== '' (paste over selection).
           if (changeStart <= tracked.startLine && changeEnd >= tracked.endLine) {
             this.recentPastes.splice(i, 1);
-            setImmediate(() => this.onUndoDetected(tracked.event.eventId));
+            consumedByUndo.add(ci);
+            setImmediate(() => this.onUndoDetected(tracked.event.eventId, tracked.event.lineCount));
             continue;
           }
 
@@ -114,7 +119,8 @@ export class EventListenerModule {
             changeStart <= tracked.endLine
           ) {
             this.recentPastes.splice(i, 1);
-            setImmediate(() => this.onUndoDetected(tracked.event.eventId));
+            consumedByUndo.add(ci);
+            setImmediate(() => this.onUndoDetected(tracked.event.eventId, tracked.event.lineCount));
             continue;
           }
 
@@ -127,17 +133,37 @@ export class EventListenerModule {
         }
       }
 
-      // ── Typing detection ─────────────────────────────────────────────────
-      // Count net new lines added (Enter key = 1 new line).
-      // Pure deletions and same-line edits produce 0 and are ignored.
-      let newLines = 0;
-      for (const c of e.contentChanges) {
+      // ── Typing / erase detection ──────────────────────────────────────────
+      // Net line delta for changes not consumed by paste undo.
+      // Positive = lines typed; negative = lines erased.
+      let netLineDelta = 0;
+      for (let ci = 0; ci < e.contentChanges.length; ci++) {
+        if (consumedByUndo.has(ci)) { continue; }
+        const c = e.contentChanges[ci];
+        // Count typed lines, excluding blank-line creation:
+        //   - Single Enter (parts.length === 2): check whether the line being
+        //     completed in the document has content. e.document is post-change,
+        //     but the completed line (range.start.line) still holds the text
+        //     that was before the cursor.
+        //   - Multi-line insertion (snippet/autocomplete): count segments that
+        //     contain non-whitespace content.
+        let added = 0;
         if (c.text.includes('\n')) {
-          newLines += c.text.split('\n').length - 1;
+          const parts = c.text.split('\n');
+          if (parts.length === 2) {
+            const completedLine = e.document.lineAt(c.range.start.line).text;
+            if (completedLine.trim() !== '') { added = 1; }
+          } else {
+            for (let pi = 0; pi < parts.length - 1; pi++) {
+              if (parts[pi + 1].trim() !== '') { added++; }
+            }
+          }
         }
+        const removed = c.range.end.line - c.range.start.line;
+        netLineDelta += added - removed;
       }
-      if (newLines > 0) {
-        setImmediate(() => this.onTypingDetected(newLines));
+      if (netLineDelta !== 0) {
+        setImmediate(() => this.onTypingDetected(netLineDelta));
       }
     });
 
