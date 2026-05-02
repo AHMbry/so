@@ -72,7 +72,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // ── 3. Business layer ─────────────────────────────────────────────────────
   const modeManager      = new ModeManager(recoveredState.activeMode);
-  const briCalculator    = new BRICalculator(recoveredState.currentBRI);
+  // BRI is per-session (FR-03) — always start fresh at 0.
+  // recoveredState.activeMode is restored because the user set it deliberately.
+  const briCalculator    = new BRICalculator(0);
   const sessionTracker   = new SessionTracker();
   const reportGenerator  = new ReportGenerator(sessionTracker, briCalculator, modeManager);
 
@@ -180,6 +182,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         pasteEventCount: sessionTracker.getSnapshot().pasteEventCount,
         modeActive: modeManager.getMode()
       });
+    },
+
+    // onTypingDetected — user pressed Enter or added new lines (not a paste)
+    (linesAdded: number) => {
+      sessionTracker.recordTyping(linesAdded);
+      sidebarPanel.updateState(currentState());
     }
   );
 

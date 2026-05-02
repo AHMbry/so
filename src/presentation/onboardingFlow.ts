@@ -23,11 +23,14 @@ export class OnboardingFlow {
   constructor(private context: vscode.ExtensionContext) {}
 
   /** Returns true if the user has already completed onboarding. */
-  public isComplete(): boolean {
-    return this.context.globalState.get<boolean>(
-      'bounded.onboardingComplete', false
-    );
-  }
+  public isComplete():  boolean {
+  return false; // temporary — remove after testing
+}
+  // boolean {
+  //   return this.context.globalState.get<boolean>(
+  //     'bounded.onboardingComplete', false
+  //   );
+  // }
 
   /** Opens the onboarding panel if not yet complete. Safe to call every launch. */
   public show(): void {
@@ -106,8 +109,8 @@ export class OnboardingFlow {
       </p>
     </div>
     <div class="nav">
-      <button class="btn-primary" onclick="goTo(2)">Get Started</button>
-      <button class="btn-ghost" onclick="skip()">Skip</button>
+      <button class="btn-primary" id="btn-get-started">Get Started</button>
+      <button class="btn-ghost"    id="btn-skip">Skip</button>
     </div>
     <div class="dots-nav">
       <div class="dot-nav active"></div>
@@ -142,8 +145,8 @@ export class OnboardingFlow {
       </div>
     </div>
     <div class="nav">
-      <button class="btn-ghost" onclick="goTo(1)">Back</button>
-      <button class="btn-primary" onclick="goTo(3)">Next</button>
+      <button class="btn-ghost"    id="btn-back-2">Back</button>
+      <button class="btn-primary"  id="btn-next-2">Next</button>
     </div>
     <div class="dots-nav">
       <div class="dot-nav"></div>
@@ -159,21 +162,19 @@ export class OnboardingFlow {
       <h2>Choose Your Mode</h2>
       <p>You can change this any time from the sidebar.</p>
       <div class="mode-cards">
-        <div class="mode-card selected" id="card-standard"
-          onclick="selectMode('Standard')">
+        <div class="mode-card selected" id="card-standard">
           <h3>Standard</h3>
           <p>Silent until BRI reaches severe. One alert per climb.</p>
         </div>
-        <div class="mode-card" id="card-strict"
-          onclick="selectMode('Strict')">
+        <div class="mode-card" id="card-strict">
           <h3>Strict</h3>
           <p>Nudges at moderate. Escalates at severe.</p>
         </div>
       </div>
     </div>
     <div class="nav">
-      <button class="btn-ghost" onclick="goTo(2)">Back</button>
-      <button class="btn-primary" onclick="goTo(4)">Next</button>
+      <button class="btn-ghost"   id="btn-back-3">Back</button>
+      <button class="btn-primary" id="btn-next-3">Next</button>
     </div>
     <div class="dots-nav">
       <div class="dot-nav"></div>
@@ -196,10 +197,8 @@ export class OnboardingFlow {
       </ul>
     </div>
     <div class="nav">
-      <button class="btn-ghost" onclick="goTo(3)">Back</button>
-      <button class="btn-primary" onclick="complete()">
-        Start Using Bounded
-      </button>
+      <button class="btn-ghost"   id="btn-back-4">Back</button>
+      <button class="btn-primary" id="btn-complete">Start Using Bounded</button>
     </div>
     <div class="dots-nav">
       <div class="dot-nav"></div>
@@ -215,16 +214,12 @@ export class OnboardingFlow {
     let currentScreen = 1;
 
     function goTo(n) {
-      // Deactivate current screen
-      document.getElementById('screen-' + currentScreen)
-        .classList.remove('active');
-
-      // Activate target screen
+      document.getElementById('screen-' + currentScreen).classList.remove('active');
       const newScreen = document.getElementById('screen-' + n);
       newScreen.classList.add('active');
       currentScreen = n;
 
-      // Update the dot indicators inside the newly active screen only
+      // Update dot indicators for the newly active screen
       const dots = newScreen.querySelectorAll('.dot-nav');
       dots.forEach(function(dot, i) {
         dot.classList.toggle('active', i + 1 === n);
@@ -233,19 +228,30 @@ export class OnboardingFlow {
 
     function selectMode(mode) {
       selectedMode = mode;
-      document.getElementById('card-standard')
-        .classList.toggle('selected', mode === 'Standard');
-      document.getElementById('card-strict')
-        .classList.toggle('selected', mode === 'Strict');
+      document.getElementById('card-standard').classList.toggle('selected', mode === 'Standard');
+      document.getElementById('card-strict').classList.toggle('selected', mode === 'Strict');
     }
 
-    function complete() {
-      vscode.postMessage({ command: 'complete', mode: selectedMode });
-    }
-
-    function skip() {
+    // ── Wire navigation buttons via addEventListener (inline onclick is
+    //    blocked by the CSP nonce policy) ──────────────────────────────────
+    document.getElementById('btn-get-started').addEventListener('click', function() { goTo(2); });
+    document.getElementById('btn-skip').addEventListener('click', function() {
       vscode.postMessage({ command: 'skip' });
-    }
+    });
+
+    document.getElementById('btn-back-2').addEventListener('click', function() { goTo(1); });
+    document.getElementById('btn-next-2').addEventListener('click', function() { goTo(3); });
+
+    document.getElementById('card-standard').addEventListener('click', function() { selectMode('Standard'); });
+    document.getElementById('card-strict').addEventListener('click', function() { selectMode('Strict'); });
+
+    document.getElementById('btn-back-3').addEventListener('click', function() { goTo(2); });
+    document.getElementById('btn-next-3').addEventListener('click', function() { goTo(4); });
+
+    document.getElementById('btn-back-4').addEventListener('click', function() { goTo(3); });
+    document.getElementById('btn-complete').addEventListener('click', function() {
+      vscode.postMessage({ command: 'complete', mode: selectedMode });
+    });
   </script>
 
 </body>

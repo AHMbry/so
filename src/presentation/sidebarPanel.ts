@@ -20,6 +20,8 @@ import { BRIState, BoundedMode } from '../types';
 export class SidebarPanel implements vscode.WebviewViewProvider {
   public static readonly viewType = 'boundedSidebarView';
   private _view?: vscode.WebviewView;
+  /** Last state received from the extension host before the WebView was ready. */
+  private _pendingState?: BRIState;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -39,6 +41,12 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
     };
 
     webviewView.webview.html = this._getHtmlContent(webviewView.webview);
+
+    // If a state update arrived before the WebView was ready, deliver it now.
+    if (this._pendingState) {
+      webviewView.webview.postMessage({ command: 'updateState', state: this._pendingState });
+      this._pendingState = undefined;
+    }
 
     // Receive messages from the WebView UI
     webviewView.webview.onDidReceiveMessage(
@@ -65,6 +73,9 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
   public updateState(state: BRIState): void {
     if (this._view) {
       this._view.webview.postMessage({ command: 'updateState', state });
+    } else {
+      // WebView not yet resolved — cache so resolveWebviewView can deliver it.
+      this._pendingState = state;
     }
   }
 
