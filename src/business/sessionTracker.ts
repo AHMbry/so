@@ -13,6 +13,7 @@ export class SessionTracker {
   private sessionId: string;
   private snapshot: SessionSnapshot;
   private currentTypingStreak: number = 0;
+  private modifiedPasteIds: Set<string> = new Set();
 
   constructor() {
     this.sessionId = `session_${Date.now()}`;
@@ -31,6 +32,15 @@ export class SessionTracker {
       this.snapshot.unmodifiedPastes += 1;
     }
     this.currentTypingStreak = 0; // paste breaks the typing streak
+  }
+
+  /** Records that a previously unmodified paste has now been edited. */
+  public recordModification(eventId: string): void {
+    if (this.modifiedPasteIds.has(eventId)) {
+      return;
+    }
+    this.modifiedPasteIds.add(eventId);
+    this.snapshot.unmodifiedPastes = Math.max(0, this.snapshot.unmodifiedPastes - 1);
   }
 
   /**
@@ -56,10 +66,13 @@ export class SessionTracker {
    * Decrements pasteEventCount, floored at 0.
    * Does not adjust linesTyped or streaks.
    */
-  public recordUndo(lineCount: number): void {
+  public recordUndo(eventId: string, lineCount: number): void {
     this.snapshot.pasteEventCount  = Math.max(0, this.snapshot.pasteEventCount - 1);
     this.snapshot.linesPasted      = Math.max(0, this.snapshot.linesPasted - lineCount);
-    this.snapshot.unmodifiedPastes = Math.max(0, this.snapshot.unmodifiedPastes - 1);
+    if (!this.modifiedPasteIds.has(eventId)) {
+      this.snapshot.unmodifiedPastes = Math.max(0, this.snapshot.unmodifiedPastes - 1);
+    }
+    this.modifiedPasteIds.delete(eventId);
   }
 
   /**
@@ -88,5 +101,6 @@ export class SessionTracker {
     this.sessionId = `session_${Date.now()}`;
     this.snapshot = { ...DEFAULT_BRI_STATE.sessionSnapshot };
     this.currentTypingStreak = 0;
+    this.modifiedPasteIds.clear();
   }
 }

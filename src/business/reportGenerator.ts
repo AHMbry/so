@@ -68,23 +68,23 @@ export class ReportGenerator {
   ): BehavioralPattern[] {
     const patterns: BehavioralPattern[] = [];
 
-    // Pattern 1: High paste ratio this session (>60% of all lines were pasted)
+    // Pattern 1: High inserted-code ratio this session (>60% of all lines were inserted)
     const totalLines = snapshot.linesTyped + snapshot.linesPasted;
     if (totalLines > 0 && snapshot.linesPasted / totalLines > 0.6) {
       const pct = Math.round((snapshot.linesPasted / totalLines) * 100);
       patterns.push({
         id: 'high-paste-ratio',
-        description: `${pct}% of lines this session were pasted. Try writing the next block from scratch.`,
+        description: `${pct}% of lines this session were inserted. Try writing the next block from scratch.`,
         severity: pct >= 80 ? 'critical' : 'warning',
       });
     }
 
-    // Pattern 2: Many unmodified pastes (>50% of paste events left untouched)
+    // Pattern 2: Many unmodified inserts (>50% of insert events left untouched)
     if (snapshot.pasteEventCount > 0 &&
         snapshot.unmodifiedPastes / snapshot.pasteEventCount > 0.5) {
       patterns.push({
         id: 'unmodified-pastes',
-        description: `${snapshot.unmodifiedPastes} of ${snapshot.pasteEventCount} pastes were accepted without any modification.`,
+        description: `${snapshot.unmodifiedPastes} of ${snapshot.pasteEventCount} inserts were accepted without any modification.`,
         severity: 'warning',
       });
     }
@@ -97,7 +97,7 @@ export class ReportGenerator {
           id: 'bri-upward-trend',
           description:
             `Your BRI has increased across your last 3 sessions ` +
-            `(${a.finalBRI.toFixed(2)} → ${b.finalBRI.toFixed(2)} → ${c.finalBRI.toFixed(2)}). ` +
+            `(${Math.round(a.finalBRI * 100)} → ${Math.round(b.finalBRI * 100)} → ${Math.round(c.finalBRI * 100)}). ` +
             `Aim to write more code independently.`,
           severity: c.finalBRI >= 0.75 ? 'critical' : 'warning',
         });
@@ -108,7 +108,7 @@ export class ReportGenerator {
     if (snapshot.linesTyped === 0 && snapshot.linesPasted > 0) {
       patterns.push({
         id: 'no-typing',
-        description: 'No lines were typed this session — all input came from paste events.',
+        description: 'No lines were typed this session — all input came from inserted code events.',
         severity: 'critical',
       });
     }
@@ -136,7 +136,7 @@ export class ReportGenerator {
         (r) => `
         <tr>
           <td>${r.date}</td>
-          <td>${r.finalBRI.toFixed(2)}</td>
+          <td>${Math.round(r.finalBRI * 100)}</td>
           <td>${r.linesTyped}</td>
           <td>${r.linesPasted}</td>
           <td>${r.modeActive}</td>
@@ -184,18 +184,18 @@ export class ReportGenerator {
   </p>
 
   <h2>Current BRI</h2>
-  <p><strong>${report.currentBRI.toFixed(2)}</strong> — ${report.stateLabel}</p>
+  <p><strong>${Math.round(report.currentBRI * 100)}</strong> — ${report.stateLabel}</p>
 
   <h2>Session Snapshot</h2>
   <table>
     <tr><th>Metric</th><th>Value</th></tr>
     <tr><td>Lines Typed</td><td>${report.snapshot.linesTyped}</td></tr>
-    <tr><td>Lines Pasted</td><td>${report.snapshot.linesPasted}</td></tr>
-    <tr><td>Paste Ratio</td><td>${pasteRatio}</td></tr>
-    <tr><td>Paste Events</td><td>${report.snapshot.pasteEventCount}</td></tr>
-    <tr><td>Unmodified Pastes</td><td>${report.snapshot.unmodifiedPastes}</td></tr>
+    <tr><td>Lines Inserted</td><td>${report.snapshot.linesPasted}</td></tr>
+    <tr><td>Inserted Ratio</td><td>${pasteRatio}</td></tr>
+    <tr><td>Insert Events</td><td>${report.snapshot.pasteEventCount}</td></tr>
+    <tr><td>Unmodified Inserts</td><td>${report.snapshot.unmodifiedPastes}</td></tr>
     <tr><td>Longest Typing Streak</td><td>${report.snapshot.longestTypingStreak} lines</td></tr>
-    <tr><td>BRI Change This Session</td><td>${report.snapshot.briDeltaSinceStart >= 0 ? '+' : ''}${report.snapshot.briDeltaSinceStart.toFixed(2)}</td></tr>
+    <tr><td>BRI Change This Session</td><td>${report.snapshot.briDeltaSinceStart >= 0 ? '+' : ''}${Math.round(report.snapshot.briDeltaSinceStart * 100)}</td></tr>
   </table>
 
   <h2>Behavioral Patterns</h2>
@@ -203,7 +203,7 @@ export class ReportGenerator {
 
   <h2>Session History (last ${report.history.length})</h2>
   <table>
-    <tr><th>Date</th><th>Final BRI</th><th>Typed</th><th>Pasted</th><th>Mode</th></tr>
+    <tr><th>Date</th><th>Final BRI</th><th>Typed</th><th>Inserted</th><th>Mode</th></tr>
     ${historyRows || '<tr><td colspan="5">No history yet.</td></tr>'}
   </table>
 </body>
