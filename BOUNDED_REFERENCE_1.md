@@ -1,235 +1,256 @@
-# Bounded — Claude Code Reference
+# Bounded - Project Reference
 
-> This file is the single source of truth for Claude Code when building the Bounded VS Code extension. Read this before writing any code.
+> This file is the single source of truth for building and maintaining the Bounded VS Code extension. Read this before changing code.
 
 ---
 
 ## 1. What Is Bounded?
 
-Bounded is a **VS Code extension** that helps programming learners detect and reduce over-reliance on AI-generated or externally sourced code. It monitors behavioral patterns during coding sessions and computes a **Behavioral Reliance Index (BRI)** — a numeric score that reflects how much the user is accepting external code without engaging with it.
+Bounded is a VS Code extension that helps programming learners notice and reduce over-reliance on externally inserted code. It monitors behavioral patterns during a coding session and computes a Behavioral Reliance Index (BRI): a score that reflects how much code was inserted without enough follow-up engagement.
 
-**Core principles:**
-- Non-intrusive by default — runs in the background, never blocks the user
-- Privacy-first — no code content is ever stored or transmitted, only behavioral metadata
-- Fully offline — zero network calls, zero cloud dependencies
-- Awareness over enforcement — nudges, not restrictions
+Bounded now treats both pasted code and AI/snippet-style inserted code as inserted code. The UI should use "inserted" language. Some internal TypeScript fields still use legacy "paste" names for compatibility.
+
+Core principles:
+
+- Non-intrusive by default: runs in the background and never blocks the user.
+- Privacy-first: code content is not persisted, exported, or transmitted.
+- Fully offline: no network calls or cloud dependencies.
+- Awareness over enforcement: uses neutral guidance and nudges, not punishment.
+- False-positive resistant: code copied from the same file or workspace should not count as an external insert.
 
 ---
 
 ## 2. Architecture Overview
 
-Bounded follows a **3-layer (N-Tier) architecture** with event-driven internal communication.
+Bounded follows a 3-layer architecture with event-driven communication.
 
-```
-┌─────────────────────────────────────────┐
-│         Presentation Layer              │
-│  (VS Code WebView — HTML/CSS/JS)        │
-│  Sidebar Panel, Dashboard, Alert Banner │
-│  Status Bar Item, Onboarding Flow       │
-└────────────────┬────────────────────────┘
-                 │ postMessage API (both ways)
-┌────────────────▼────────────────────────┐
-│         Business Logic Layer            │
-│  (Extension Host — TypeScript/Node.js)  │
-│  Event Listener, Paste Classifier,      │
-│  BRI Calculator, Session Tracker,       │
-│  Mode Manager, Alert Controller,        │
-│  Report Generator                       │
-└────────────────┬────────────────────────┘
-                 │ Node.js fs module
-┌────────────────▼────────────────────────┐
-│           Data Layer                    │
-│  (Local JSON files — no DB, no cloud)   │
-│  BRI State Store, Session History Store │
-│  PDF Export (on-demand, local only)     │
-└─────────────────────────────────────────┘
+```text
+Presentation Layer
+  VS Code WebViews, status bar text, notification nudges
+  Sidebar Panel, Dashboard Panel, Onboarding Flow
+        |
+        | postMessage API
+        v
+Business Logic Layer
+  Extension Host TypeScript modules
+  Event Listener, Insert Classifier, BRI Calculator,
+  Session Tracker, Mode Manager, Alert Controller,
+  Report Generator
+        |
+        | local file access
+        v
+Data Layer
+  Local JSON files only
+  BRI State Store, Session History Store, Report Exporter
 ```
 
-**Strict dependency rule:** Presentation → Business → Data. No layer skips another.
+Strict dependency rule: Presentation -> Business -> Data. Do not skip layers.
 
 ---
 
 ## 3. Folder Structure
 
-```
+```text
 bounded/
-├── src/
-│   ├── extension.ts              ← Entry point (activate / deactivate)
-│   ├── business/
-│   │   ├── eventListener.ts      ← Captures VS Code editor events
-│   │   ├── pasteClassifier.ts    ← Internal vs external paste detection
-│   │   ├── briCalculator.ts      ← Core BRI computation
-│   │   ├── sessionTracker.ts     ← Per-session stats
-│   │   ├── modeManager.ts        ← Standard / Strict mode
-│   │   ├── alertController.ts    ← Threshold monitoring + alert trigger
-│   │   └── reportGenerator.ts   ← Assembles session report
-│   ├── data/
-│   │   ├── briStateStore.ts      ← Read/write BRI state JSON
-│   │   └── sessionHistoryStore.ts ← Read/write session history JSON
-│   └── presentation/
-│       ├── sidebarPanel.ts       ← WebView sidebar provider
-│       ├── dashboardPanel.ts     ← Full dashboard WebView
-│       ├── alertBanner.ts        ← Dismissible alert banner
-│       ├── statusBarItem.ts      ← Bottom status bar
-│       └── onboardingFlow.ts     ← First-launch multi-screen WebView
-├── media/
-│   ├── icon.svg                  ← Activity bar icon
-│   ├── sidebar.css               ← Sidebar WebView styles
-│   └── dashboard.css             ← Dashboard WebView styles
-├── package.json
-├── tsconfig.json
-├── .vscodeignore
-├── .gitignore
-└── README.md
+|-- src/
+|   |-- extension.ts                  Entry point and runtime wiring
+|   |-- types.ts                      Shared app types
+|   |-- business/
+|   |   |-- eventListener.ts          Captures VS Code document changes
+|   |   |-- pasteClassifier.ts        Inserted-code classifier
+|   |   |-- briCalculator.ts          Core BRI computation
+|   |   |-- sessionTracker.ts         Per-session stats
+|   |   |-- modeManager.ts            Standard / Strict mode
+|   |   |-- alertController.ts        Threshold monitoring
+|   |   |-- reportGenerator.ts        Session report assembly
+|   |-- data/
+|   |   |-- briStateStore.ts          Read/write current BRI JSON
+|   |   |-- sessionHistoryStore.ts    Read/write session history JSON
+|   |   |-- reportExporter.ts         Local report export
+|   |-- presentation/
+|       |-- sidebarPanel.ts           Activity bar WebView provider
+|       |-- dashboardPanel.ts         Full dashboard WebView
+|       |-- onboardingFlow.ts         Multi-screen onboarding WebView
+|-- media/
+|   |-- icon.svg
+|   |-- sidebar.css
+|   |-- dashboard.css
+|   |-- onboarding.css
+|-- package.json
+|-- tsconfig.json
+|-- README.md
 ```
 
 ---
 
 ## 4. package.json Key Fields
 
-```json
-{
-  "name": "bounded",
-  "displayName": "Bounded",
-  "description": "Detect and reduce over-reliance on AI-generated code through behavioral analysis.",
-  "version": "0.0.1",
-  "engines": { "vscode": "^1.85.0" },
-  "activationEvents": ["onStartupFinished"],
-  "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      { "command": "bounded.openDashboard", "title": "Bounded: Open Dashboard" },
-      { "command": "bounded.toggleMode", "title": "Bounded: Toggle Mode (Standard / Strict)" },
-      { "command": "bounded.generateReport", "title": "Bounded: Generate Session Report" }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        { "id": "bounded-sidebar", "title": "Bounded", "icon": "media/icon.svg" }
-      ]
-    },
-    "views": {
-      "bounded-sidebar": [
-        { "id": "boundedSidebarView", "name": "BRI Overview", "type": "webview" }
-      ]
-    },
-    "configuration": {
-      "properties": {
-        "bounded.mode": {
-          "type": "string",
-          "enum": ["Standard", "Strict"],
-          "default": "Standard"
-        },
-        "bounded.alertThreshold": {
-          "type": "number",
-          "default": 0.75
-        }
-      }
-    }
-  }
-}
-```
-
----
-
-## 5. TypeScript Config
+Current extension activation:
 
 ```json
 {
-  "compilerOptions": {
-    "module": "commonjs",
-    "target": "ES2020",
-    "outDir": "./out",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "sourceMap": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", ".vscode-test"]
+  "activationEvents": ["onStartupFinished", "onView:boundedSidebarView"],
+  "main": "./out/extension.js"
 }
 ```
 
+Main contributed commands:
+
+- `bounded.openDashboard`
+- `bounded.toggleMode`
+- `bounded.generateReport`
+
+Main contributed view:
+
+- Activity bar container: `bounded-sidebar`
+- WebView view id: `boundedSidebarView`
+
+Main configuration:
+
+- `bounded.mode`: `Standard` or `Strict`
+- `bounded.alertThreshold`: default `0.75`
+
 ---
 
-## 6. Functional Requirements
+## 5. Functional Requirements
 
 | ID | Requirement |
 |----|-------------|
-| FR-01 | Record the number of lines and timestamp of each paste event |
-| FR-02 | Detect paste events when multiple large pastes occur within a short time window |
-| FR-03 | Calculate a Behavioral Reliance Index (BRI) per session |
-| FR-04 | BRI shall NOT change when pasted content originates from within the same workspace |
-| FR-05 | BRI shall INCREASE when large code blocks are pasted without meaningful modification |
-| FR-06 | BRI shall DECREASE when a paste is undone, reversing that paste's exact contribution |
-| FR-07 | Generate a session report containing lines typed, lines pasted, and BRI score |
-| FR-08 | Display a dismissible alert when BRI crosses the severe reliance threshold |
-| FR-09 | Support Standard mode (quiet until high BRI) and Strict mode (nudges start earlier) |
-| FR-10 | SHALL NOT store or transmit the content of any pasted or typed code |
-| FR-11 | Save the current BRI state to a local file every time the user saves their workspace |
+| FR-01 | Record inserted-code events with line count and timestamp. |
+| FR-02 | Treat clipboard pastes, snippets, and AI-agent multi-line insertions as inserted code when they meet the classifier threshold. |
+| FR-03 | Calculate a Behavioral Reliance Index per session. |
+| FR-04 | Do not increase BRI for code copied from the same file or same workspace/codebase. |
+| FR-05 | Increase BRI when external inserted code is introduced into the session. |
+| FR-06 | Reduce or reverse an inserted block's BRI contribution when the user edits or removes that block. |
+| FR-07 | Track typed lines, inserted lines, insert events, and longest typing streak. |
+| FR-08 | Display BRI as a score out of 100 in the UI while keeping the internal value on a 0.0-1.0 scale. |
+| FR-09 | Generate a session report containing typed lines, inserted lines, insert events, BRI, mode, and summary text. |
+| FR-10 | Support Standard mode and Strict mode with immediate switching. |
+| FR-11 | Save current BRI state locally when the workspace/document is saved. |
+| FR-12 | Provide sidebar, dashboard, status bar, onboarding, and neutral threshold nudges. |
+| FR-13 | Provide local light/dark theme toggles in WebViews. |
 
 ---
 
-## 7. Non-Functional Requirements
+## 6. Non-Functional Requirements
 
 | ID | Requirement |
 |----|-------------|
-| NF-01 | Paste event detection must register within **100ms** of the event occurring |
-| NF-03 | Alert trigger must occupy less than **10% of screen** and be dismissible via Esc |
-| NF-05 | Session report must be readable in under 2 minutes |
-| NF-06 | Alert language must be neutral — no punishment or failure language |
-| NF-07 | Mode switching must take effect **immediately** with no restart |
-| NF-09 | Extension must be **fully functional offline** — zero network calls |
-| NF-11 | BRI state must survive unexpected VS Code closure by recovering last saved state |
+| NF-01 | Keep document-change handling lightweight and synchronous where possible. |
+| NF-02 | Use a best-effort workspace text cache for internal-copy detection. |
+| NF-03 | Warm the workspace cache asynchronously and avoid counting external inserts while the cache is still warming. |
+| NF-04 | Do not store, export, or transmit code content. Transient in-memory text comparison is allowed only for internal-copy detection. |
+| NF-05 | Remain fully functional offline. |
+| NF-06 | Use neutral, non-accusatory language. Avoid terms such as "cheating", "failed", or "wrong". |
+| NF-07 | Mode switching must take effect immediately. |
+| NF-08 | UI should feel quiet, modern, and VS Code-native, not flashy or marketing-heavy. |
 
 ---
 
-## 8. BRI Logic Rules
+## 7. BRI Logic Rules
 
-```
-BRI is a numeric score from 0.0 to 1.0 representing reliance severity.
+Internal BRI is a number from `0.0` to `1.0`. UI BRI is displayed as `internalBRI * 100`.
 
 State labels:
-  0.0 – 0.40  →  LOW
-  0.41 – 0.74 →  MODERATE
-  0.75 – 1.0  →  SEVERE  ← alert triggers here
 
-Rules per event:
-  - External paste, large block, no meaningful modification → BRI increases (FR-05)
-  - Paste undone → BRI decreases by that paste's exact contribution (FR-06)
-  - Internal paste (from same workspace) → no BRI change (FR-04)
-
-Mode behavior:
-  - Standard: silent until SEVERE threshold
-  - Strict: nudges begin at MODERATE, escalate at SEVERE
+```text
+0.00 - 0.40  low
+0.41 - 0.74  moderate
+0.75 - 1.00  severe
 ```
+
+Status colors:
+
+- Low: green
+- Moderate: yellow
+- Severe: red
+
+Per inserted block:
+
+```text
+baseContribution = min(0.05 + insertedLineCount * 0.005, 0.15)
+adjustedContribution = baseContribution * (1 - modificationDepth)
+```
+
+Rules:
+
+- External inserted code increases BRI.
+- Internal same-file or same-workspace inserts do not increase BRI.
+- Editing inserted code applies a graded reduction based on `modificationDepth`.
+- Removing/undoing an inserted block reverses that block's contribution.
+- Higher inserted-line ratio raises BRI.
+- Long typing streaks and higher typed-line ratio reduce BRI.
+- Modification credit is scaled by project size, so small edits in larger projects reduce BRI gradually.
+- Rapid insert frequency adds a separate adjustment when more than 3 active inserts occur within 10 minutes.
+- If there is at least one active external insert, the internal BRI floor is `0.05` so the UI never shows `0` while inserted code remains active.
+- Final internal BRI is clamped to `0.0-1.0` and rounded to 2 decimals.
+
+Session-level adjustments currently use:
+
+- `linesTyped`
+- `linesPasted` internally, displayed as inserted lines
+- `pasteEventCount` internally, displayed as insert events
+- `longestTypingStreak`
+- Active insert frequency in a recent time window
+
+---
+
+## 8. Inserted-Code Detection
+
+The file is still named `pasteClassifier.ts`, but it now acts as an inserted-code classifier.
+
+Classifier behavior:
+
+- Qualifies multi-line insertions with at least 3 non-empty inserted lines.
+- Handles clipboard paste, snippet insertion, and AI-agent insertion patterns through VS Code document-change events.
+- Uses the previous version of the same document to detect same-file copies.
+- Uses open workspace documents to detect copied workspace code.
+- Uses an asynchronously warmed workspace text cache to detect copied codebase content even when source files are not open.
+- Skips common generated/dependency folders such as `.git`, `node_modules`, `out`, `dist`, `build`, and `.vscode-test`.
+- Skips large files above the configured cache-size limit.
+- While the workspace cache is warming, large external-looking inserts are ignored to reduce false positives.
+- Tracks multi-location edits as multiple ranges rather than a single broad range.
+
+Privacy boundary:
+
+- Code text may be compared in memory for classification.
+- Code text must not be written to BRI state, history, reports, logs, telemetry, or network.
 
 ---
 
 ## 9. Data Schemas
 
 ### BRI State Store (`bri-state.json`)
+
+Internal field names currently preserve legacy paste terminology:
+
 ```json
 {
   "currentBRI": 0.42,
   "stateLabel": "moderate",
   "activeMode": "Standard",
-  "lastSaved": "2025-04-21T10:30:00Z",
+  "lastSaved": "2026-05-03T10:30:00Z",
   "sessionSnapshot": {
     "linesTyped": 120,
     "linesPasted": 80,
     "pasteEventCount": 5,
-    "unmodifiedPastes": 3,
-    "longestTypingStreak": 45
+    "longestTypingStreak": 45,
+    "briDeltaSinceStart": 0.12
   }
 }
 ```
 
+UI mapping:
+
+- `linesPasted` -> Lines Inserted
+- `pasteEventCount` -> Insert Events
+
 ### Session History Store (`session-history.json`)
+
 ```json
 [
   {
-    "date": "2025-04-21",
+    "date": "2026-05-03",
     "finalBRI": 0.42,
     "linesTyped": 120,
     "linesPasted": 80,
@@ -239,50 +260,114 @@ Mode behavior:
 ]
 ```
 
-### ERD Entities
+### Conceptual ERD Entities
 
-**Settings** — `user_id (PK)`, `current_mode`, `privacy_accepted`, `alert_threshold`
+Settings:
 
-**Session** — `session_id (PK)`, `user_id (FK)`, `start_at`, `end_at`, `total_lines_typed`, `total_lines_pasted`, `final_bri_score`, `is_active`
+- `user_id`
+- `current_mode`
+- `privacy_accepted`
+- `alert_threshold`
 
-**Behavioral_Event** — `event_id (PK)`, `session_id (FK)`, `occurred_at`, `event_type (PASTE/UNDO/MODIFICATION)`, `line_count`, `is_internal`, `is_undone`, `modification_depth`
+Session:
 
-**Historical_Stat** — `stat_date (PK)`, `user_id (FK)`, `aggregate_bri`, `session_count`
+- `session_id`
+- `start_at`
+- `end_at`
+- `total_lines_typed`
+- `total_lines_inserted`
+- `final_bri_score`
+- `is_active`
+
+Behavioral_Event:
+
+- `event_id`
+- `session_id`
+- `occurred_at`
+- `event_type` (`INSERT`, `UNDO`, `MODIFICATION`)
+- `line_count`
+- `is_internal`
+- `is_undone`
+- `modification_depth`
+
+Historical_Stat:
+
+- `stat_date`
+- `aggregate_bri`
+- `session_count`
 
 ---
 
-## 10. Event Flow (Internal Communication)
+## 10. Event Flow
 
-```
-User action (paste / type / undo / save)
-        ↓
-Event Listener Module (captures VS Code API event)
-        ↓
-Paste Classifier → is it internal or external?
-Session Tracker  → update session stats
-        ↓
-BRI Calculator → update BRI value + state label
-        ↓
-Alert Controller → has severe threshold been crossed?
-        ↓
-postMessage → Sidebar Panel re-renders with new BRI
-        ↓ (if alert)
-Alert Banner appears in editor
-        ↓ (on workspace save)
-BRI State Store writes to disk (FR-11)
+```text
+User action: type, insert, edit, undo, save
+        |
+        v
+Event Listener captures VS Code document change
+        |
+        v
+Inserted-code classifier determines internal vs external
+        |
+        v
+Session Tracker updates typed/inserted stats
+        |
+        v
+BRI Calculator updates BRI and state label
+        |
+        v
+Alert Controller checks thresholds
+        |
+        v
+Sidebar/Dashboard receive refreshed state
+        |
+        v
+Status bar updates: BRI score, state color, mode
+        |
+        v
+On save, BRI State Store writes local JSON
 ```
 
 ---
 
-## 11. Presentation Layer Components
+## 11. Presentation Layer
 
-| Component | Description |
-|-----------|-------------|
-| **Sidebar Panel** | Primary WebView. Shows BRI ring gauge, numeric score, state label, session snapshot table, mode toggle, CTA to dashboard |
-| **Alert Banner** | Dismissible inline banner at bottom of editor. Appears at SEVERE threshold. Dismissible via Esc or close button. Max 10% screen height |
-| **Full Dashboard View** | On-demand WebView. Shows BRI trends over time, session history, behavioral patterns, report generation + PDF download |
-| **Status Bar Item** | Persistent item in bottom VS Code status bar. Shows BRI score, active mode, paste count at all times |
-| **Onboarding Flow** | Multi-screen WebView on first install. Feature highlights, BRI explainer, mode selection, T&C |
+### Sidebar Panel
+
+- Compact VS Code-native coaching panel.
+- Shows BRI ring, score out of 100, state label, active mode, and session stats.
+- Uses "inserted" terminology in visible text.
+- Includes dashboard, report, and mode actions.
+- Includes local light/dark theme toggle.
+- Uses neutral button styling with subtle hover/press animation.
+
+### Dashboard Panel
+
+- Full dashboard WebView for session review.
+- Shows BRI score, label, metric strip, trend chart, behavioral patterns, history, and report actions.
+- Uses modern system fonts and quiet styling.
+- Includes local light/dark theme toggle.
+
+### Onboarding Flow
+
+- Multi-screen WebView with progress steps.
+- Explains BRI, mode choice, and privacy.
+- Includes local light/dark theme toggle.
+- Toggle changes contrast visibly when pressed.
+- Has polished navigation and hover animation.
+- Current development behavior: onboarding is forced to appear on every activation by returning `false` from `isComplete()`.
+
+### Status Bar
+
+- Shows BRI score, state, and active mode in the bottom VS Code bar.
+- Uses green for low, yellow for moderate, and red for severe.
+- Severe state must never render white.
+
+### Alerts
+
+- Alert Controller triggers neutral nudges based on BRI thresholds and active mode.
+- Standard mode stays quieter.
+- Strict mode nudges earlier.
 
 ---
 
@@ -290,46 +375,59 @@ BRI State Store writes to disk (FR-11)
 
 | Component | Technology | Reason |
 |-----------|------------|--------|
-| Extension language | TypeScript | VS Code standard; strong typing for event logic |
-| UI rendering | VS Code WebView (HTML/CSS/JS) | Only supported rich UI mechanism in VS Code |
-| IPC (UI ↔ Logic) | VS Code postMessage API | Required by VS Code architecture |
-| Persistence | JSON via Node.js `fs` | No external deps; human-readable; supports recovery |
-| PDF export | Local HTML-to-PDF (no cloud) | Offline; no external rendering service |
-| Event capture | VS Code workspace + document API | Only sanctioned way to observe editor events |
+| Extension language | TypeScript | VS Code standard and strong typing |
+| UI rendering | VS Code WebView | Required for rich extension UI |
+| IPC | VS Code `postMessage` | Standard WebView communication |
+| Persistence | Local JSON via Node.js APIs | Offline, simple, recoverable |
+| Event capture | VS Code workspace/document APIs | Supported editor-event surface |
+| Styling | Plain CSS in `media/` | Lightweight and easy to package |
 
 ---
 
-## 13. Build Phases
+## 13. Current Implementation Status
 
-| Phase | What Gets Built |
-|-------|----------------|
-| **Phase 1** | Project scaffold — folder structure, package.json, tsconfig, extension.ts entry point, status bar placeholder |
-| **Phase 2** | Data layer — JSON read/write helpers for BRI state store and session history store |
-| **Phase 3** | Event Listener + Paste Classifier — capture paste events, classify internal vs external |
-| **Phase 4** | BRI Calculator + Session Tracker — compute BRI score, track per-session stats |
-| **Phase 5** | Mode Manager + Alert Controller — Standard/Strict modes, threshold alerts |
-| **Phase 6** | Presentation Layer — Sidebar WebView, status bar, alert banner |
-| **Phase 7** | Dashboard + Report Generator — full dashboard, PDF export |
-| **Phase 8** | Onboarding Flow — first-launch multi-screen WebView |
+Implemented:
+
+- BRI state persistence and session history persistence.
+- Inserted-code classification for paste/snippet/AI-style multi-line inserts.
+- Same-file and same-workspace false-positive filtering.
+- Workspace text cache warm-up for internal-copy detection.
+- Graded BRI reductions when inserted code is modified.
+- Undo/removal reversal for inserted blocks.
+- Minimum BRI floor while active external inserted code remains.
+- Session-level BRI adjustments from typing, inserted lines, and rapid insert frequency.
+- Sidebar, dashboard, onboarding, report generation, mode toggling, and status bar updates.
+- Visible UI copy changed from pasted code to inserted code.
+- Light/dark toggles for WebViews.
+- Moderate yellow and severe red status colors.
+
+Known cleanup / future work:
+
+- Internal field names still use some paste terminology (`linesPasted`, `pasteEventCount`) for compatibility.
+- The classifier file name remains `pasteClassifier.ts` even though it now detects broader inserted-code events.
+- Onboarding is currently forced to appear every activation for development/testing.
+- Automated test coverage is still needed for BRI math, inserted-code classification, and line-count edge cases.
+- Dashboard live trend fidelity can be expanded once more historical data is collected.
 
 ---
 
-## 14. Hard Rules (Never Break These)
+## 14. Hard Rules
 
-- **Never store or transmit code content** — only counts, scores, timestamps (FR-10)
-- **Never make network calls** — extension must work fully offline (NF-09)
-- **Never skip a layer** — Presentation never talks to Data directly
-- **Always use postMessage** for WebView ↔ Extension Host communication
-- **BRI must update within 100ms** of a paste event (NF-01)
-- **Alert language must be neutral** — no words like "cheating", "wrong", "failed" (NF-06)
-- **Mode switch must be instant** — no restart, no reload (NF-07)
-- **Internal pastes never affect BRI** (FR-04)
+- Never persist or transmit code content.
+- Never add network calls.
+- Keep Presentation -> Business -> Data boundaries intact.
+- Use `postMessage` for WebView to Extension Host communication.
+- Do not count same-file or same-workspace copied code as external inserted code.
+- Keep BRI internal scale `0.0-1.0`; convert to `0-100` only for display.
+- Use neutral language in all alerts and coaching copy.
+- Mode switching must be immediate.
+- Preserve existing user changes when editing the codebase.
 
 ---
 
 ## 15. Members
 
-- Rayane Fajri — 161325
-- Ahmed Bourouay — 162440
-- Mohammed Ateich — 162502
-- Mohammed El Jahid — 163723
+- Rayane Fajri - 161325
+- Ahmed Bourouay - 162440
+- Mohammed Ateich - 162502
+- Mohammed El Jahid - 163723

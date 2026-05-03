@@ -16,9 +16,12 @@ import {
 } from '../types';
 
 interface PasteContribution {
+  lineCount: number;
+  projectLineCount: number;
   baseContribution: number;
   currentContribution: number;
-  modificationDepth: number;
+  rawModificationDepth: number;
+  effectiveModificationDepth: number;
   occurredAtMs: number;
 }
 
@@ -46,11 +49,23 @@ export class BRICalculator {
   ): BRIState {
     if (!event.isInternal && event.lineCount >= 3) {
       const baseContribution = Math.min(0.05 + event.lineCount * 0.005, 0.15);
-      const modificationDepth = this.clamp01(event.modificationDepth);
+      const rawModificationDepth = this.clamp01(event.modificationDepth);
+      const projectLineCount = Math.max(
+        event.lineCount,
+        event.projectLineCount ?? this.estimateProjectLineCount(sessionSnapshot, event.lineCount)
+      );
+      const effectiveModificationDepth = this.calculateEffectiveModificationDepth(
+        rawModificationDepth,
+        event.lineCount,
+        projectLineCount
+      );
       this.contributions.set(event.eventId, {
+        lineCount: event.lineCount,
+        projectLineCount,
         baseContribution,
-        currentContribution: baseContribution * (1 - modificationDepth),
-        modificationDepth,
+        currentContribution: baseContribution * (1 - effectiveModificationDepth),
+        rawModificationDepth,
+        effectiveModificationDepth,
         occurredAtMs: this.parseEventTime(event.occurredAt),
       });
     }
@@ -66,16 +81,28 @@ export class BRICalculator {
     eventId: string,
     modificationDepth: number,
     activeMode: BoundedMode,
-    sessionSnapshot: SessionSnapshot
+    sessionSnapshot: SessionSnapshot,
+    projectLineCount?: number
   ): BRIState {
     const contribution = this.contributions.get(eventId);
     if (contribution !== undefined) {
-      contribution.modificationDepth = Math.max(
-        contribution.modificationDepth,
+      contribution.rawModificationDepth = Math.max(
+        contribution.rawModificationDepth,
         this.clamp01(modificationDepth)
       );
+      contribution.projectLineCount = Math.max(
+        contribution.lineCount,
+        projectLineCount ??
+          contribution.projectLineCount ??
+          this.estimateProjectLineCount(sessionSnapshot, contribution.lineCount)
+      );
+      contribution.effectiveModificationDepth = this.calculateEffectiveModificationDepth(
+        contribution.rawModificationDepth,
+        contribution.lineCount,
+        contribution.projectLineCount
+      );
       contribution.currentContribution =
-        contribution.baseContribution * (1 - contribution.modificationDepth);
+        contribution.baseContribution * (1 - contribution.effectiveModificationDepth);
     }
 
     return this.recalculate(activeMode, sessionSnapshot);
@@ -132,6 +159,20 @@ export class BRICalculator {
     return Number.isNaN(parsed) ? Date.now() : parsed;
   }
 
+  private estimateProjectLineCount(snapshot: SessionSnapshot, insertedLineCount: number): number {
+    return Math.max(insertedLineCount, snapshot.linesTyped + snapshot.linesPasted);
+  }
+
+  private calculateEffectiveModificationDepth(
+    rawModificationDepth: number,
+    insertedLineCount: number,
+    projectLineCount: number
+  ): number {
+    const projectBaseline = Math.max(insertedLineCount, projectLineCount * 0.25);
+    const projectScale = Math.sqrt(insertedLineCount / projectBaseline);
+    return this.clamp01(rawModificationDepth * projectScale);
+  }
+
   /**
    * Session-level signals are intentionally small compared with paste
    * contributions; they refine the score without drowning the core behavior.
@@ -140,18 +181,13 @@ export class BRICalculator {
     const totalLines = snapshot.linesTyped + snapshot.linesPasted;
     const pasteRatio = totalLines > 0 ? snapshot.linesPasted / totalLines : 0;
     const typedRatio = totalLines > 0 ? snapshot.linesTyped / totalLines : 0;
-    const unmodifiedRatio =
-      snapshot.pasteEventCount > 0
-        ? snapshot.unmodifiedPastes / snapshot.pasteEventCount
-        : 0;
 
     const pasteVolume = Math.min(snapshot.pasteEventCount * 0.01, 0.08);
     const pasteRatioLoad = Math.max(0, pasteRatio - 0.5) * 0.16;
-    const unmodifiedLoad = unmodifiedRatio * Math.min(snapshot.pasteEventCount * 0.015, 0.12);
     const typingCredit = Math.min(snapshot.longestTypingStreak * 0.003, 0.1);
     const typedRatioCredit = typedRatio * 0.05;
 
-    return pasteVolume + pasteRatioLoad + unmodifiedLoad - typingCredit - typedRatioCredit;
+    return pasteVolume + pasteRatioLoad - typingCredit - typedRatioCredit;
   }
 
   /** Adds a burst signal when several active pastes happen in a short window. */

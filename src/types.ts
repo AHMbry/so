@@ -20,7 +20,6 @@ export interface SessionSnapshot {
   linesTyped: number;
   linesPasted: number;
   pasteEventCount: number;
-  unmodifiedPastes: number;
   longestTypingStreak: number;
   briDeltaSinceStart: number;
 }
@@ -60,6 +59,7 @@ export interface BehavioralEvent {
   occurredAt: string;       // ISO 8601 timestamp
   eventType: 'PASTE' | 'UNDO' | 'MODIFICATION';
   lineCount: number;
+  projectLineCount?: number;
   isInternal: boolean;      // FR-04: internal paste → no BRI change
   isUndone: boolean;        // FR-06: undone paste → BRI decrease
   modificationDepth: number; // FR-05: 0 = no edits, higher = more edits applied
@@ -77,7 +77,6 @@ export const DEFAULT_BRI_STATE: BRIState = {
     linesTyped: 0,
     linesPasted: 0,
     pasteEventCount: 0,
-    unmodifiedPastes: 0,
     longestTypingStreak: 0,
     briDeltaSinceStart: 0,
   },
