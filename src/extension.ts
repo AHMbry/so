@@ -33,16 +33,16 @@ function updateStatusBar(
   label: BRIStateLabel,
   mode: BoundedMode
 ): void {
-  item.text = `$(pulse) BRI: ${bri.toFixed(2)} | ${mode}`;
+  item.text = `$(pulse) BRI: ${Math.round(bri * 100)} | ${mode}`;
   switch (label) {
     case 'low':
       item.color = new vscode.ThemeColor('terminal.ansiGreen');
       break;
     case 'moderate':
-      item.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+      item.color = new vscode.ThemeColor('terminal.ansiYellow');
       break;
     case 'severe':
-      item.color = new vscode.ThemeColor('statusBarItem.errorForeground');
+      item.color = new vscode.ThemeColor('terminal.ansiRed');
       break;
   }
 }
@@ -138,10 +138,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         `Bounded: paste detected — lines: ${event.lineCount}, internal: ${event.isInternal}`
       );
       sessionTracker.recordPaste(event);
-      const updatedState = briCalculator.processPaste(event);
+      const updatedState = briCalculator.processPaste(
+        event,
+        modeManager.getMode(),
+        sessionTracker.getSnapshot()
+      );
       sessionTracker.updateBRIDelta(
         briCalculator.getCurrentBRI(),
-        recoveredState.currentBRI
+        0
       );
       alertController.check(updatedState.stateLabel);
       updateStatusBar(
@@ -157,8 +161,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // onUndoDetected — a previous external paste was reversed (FR-06)
     (eventId: string, lineCount: number) => {
       console.log(`Bounded: undo detected — eventId: ${eventId}`);
-      sessionTracker.recordUndo(lineCount);
-      const updatedState = briCalculator.processUndo(eventId);
+      sessionTracker.recordUndo(eventId, lineCount);
+      const updatedState = briCalculator.processUndo(
+        eventId,
+        modeManager.getMode(),
+        sessionTracker.getSnapshot()
+      );
+      sessionTracker.updateBRIDelta(
+        briCalculator.getCurrentBRI(),
+        0
+      );
       alertController.check(updatedState.stateLabel);
       updateStatusBar(
         statusBar,
@@ -170,7 +182,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // TODO: Phase 7 — push live BRI delta to open dashboard via postMessage
     },
 
-    // onWorkspaceSaved — assembles full BRIState and persists to disk (FR-11)
+    // onModificationDetected - a pasted block was edited after insertion (FR-05)
+    (eventId: string, modificationDepth: number) => {
+      console.log(
+        `Bounded: paste modified - eventId: ${eventId}, depth: ${modificationDepth.toFixed(2)}`
+      );
+      sessionTracker.recordModification(eventId);
+      const updatedState = briCalculator.processModification(
+        eventId,
+        modificationDepth,
+        modeManager.getMode(),
+        sessionTracker.getSnapshot()
+      );
+      sessionTracker.updateBRIDelta(
+        briCalculator.getCurrentBRI(),
+        0
+      );
+      alertController.check(updatedState.stateLabel);
+      updateStatusBar(
+        statusBar,
+        briCalculator.getCurrentBRI(),
+        briCalculator.getStateLabel(),
+        modeManager.getMode()
+      );
+      sidebarPanel.updateState(currentState());
+    },
+
+    // onWorkspaceSaved - assembles full BRIState and persists to disk (FR-11)
     async () => {
       const state = currentState();
       await writeBRIState(context, state);
@@ -188,6 +226,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // onTypingDetected — user pressed Enter or added new lines (not a paste)
     (linesAdded: number) => {
       sessionTracker.recordTyping(linesAdded);
+      const updatedState = briCalculator.processSessionActivity(
+        modeManager.getMode(),
+        sessionTracker.getSnapshot()
+      );
+      sessionTracker.updateBRIDelta(
+        briCalculator.getCurrentBRI(),
+        0
+      );
+      alertController.check(updatedState.stateLabel);
+      updateStatusBar(
+        statusBar,
+        briCalculator.getCurrentBRI(),
+        briCalculator.getStateLabel(),
+        modeManager.getMode()
+      );
       sidebarPanel.updateState(currentState());
     }
   );

@@ -1,16 +1,6 @@
 /**
  * onboardingFlow.ts
  * Multi-screen first-launch WebView for the Bounded extension.
- *
- * Shows four screens: Welcome → BRI Explainer → Mode Selection → Privacy.
- * Persists completion state in VS Code's globalState so it never re-shows.
- * globalState key: 'bounded.onboardingComplete' (boolean)
- *
- * Architecture rules observed:
- *   - postMessage / onDidReceiveMessage only for WebView ↔ Host communication
- *   - No code content stored or logged (FR-10)
- *   - Alert language is neutral — no punishment words (NF-06)
- *   - No network calls (NF-09)
  */
 
 import * as vscode from 'vscode';
@@ -22,17 +12,10 @@ export class OnboardingFlow {
 
   constructor(private context: vscode.ExtensionContext) {}
 
-  /** Returns true if the user has already completed onboarding. */
-  public isComplete():  boolean {
-  return false; // temporary — remove after testing
-}
-  // boolean {
-  //   return this.context.globalState.get<boolean>(
-  //     'bounded.onboardingComplete', false
-  //   );
-  // }
+  public isComplete(): boolean {
+    return false;
+  }
 
-  /** Opens the onboarding panel if not yet complete. Safe to call every launch. */
   public show(): void {
     if (this.isComplete()) { return; }
 
@@ -54,11 +37,9 @@ export class OnboardingFlow {
     const nonce = this._getNonce();
     this.panel.webview.html = this._getHtml(cssUri, nonce);
 
-    // Handle messages from the onboarding WebView
     this.panel.webview.onDidReceiveMessage(
       async (message: { command: string; mode?: BoundedMode }) => {
         if (message.command === 'complete') {
-          // Persist the user's mode choice to VS Code settings
           if (message.mode) {
             await vscode.workspace.getConfiguration().update(
               'bounded.mode',
@@ -66,16 +47,11 @@ export class OnboardingFlow {
               vscode.ConfigurationTarget.Global
             );
           }
-          // Mark onboarding complete — never shown again
-          await this.context.globalState.update(
-            'bounded.onboardingComplete', true
-          );
+          await this.context.globalState.update('bounded.onboardingComplete', true);
           this.panel?.dispose();
         }
         if (message.command === 'skip') {
-          await this.context.globalState.update(
-            'bounded.onboardingComplete', true
-          );
+          await this.context.globalState.update('bounded.onboardingComplete', true);
           this.panel?.dispose();
         }
       }
@@ -94,136 +70,126 @@ export class OnboardingFlow {
   <link rel="stylesheet" href="${cssUri}">
 </head>
 <body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="brand">Bounded</div>
+        <p>Build awareness around inserted code while you learn!</p>
+      </div>
+      <button class="theme-toggle" id="theme-btn">Light</button>
+    </header>
 
-  <!-- Screen 1: Welcome -->
-  <div class="screen active" id="screen-1">
-    <div class="logo">Bounded</div>
-    <div class="tagline">Stay in control of your own thinking.</div>
-    <div class="card">
-      <h2>Welcome</h2>
-      <p>
-        Bounded monitors your coding sessions to help you recognize
-        when you have stopped engaging with the code you are using.
-        It works quietly in the background and never reads or stores
-        what you write — only how you write it.
-      </p>
-    </div>
-    <div class="nav">
-      <button class="btn-primary" id="btn-get-started">Get Started</button>
-      <button class="btn-ghost"    id="btn-skip">Skip</button>
-    </div>
-    <div class="dots-nav">
-      <div class="dot-nav active"></div>
-      <div class="dot-nav"></div>
-      <div class="dot-nav"></div>
-      <div class="dot-nav"></div>
-    </div>
-  </div>
+    <nav class="progress" aria-label="Onboarding progress">
+      <span class="step active" data-step="1">Welcome</span>
+      <span class="step" data-step="2">BRI</span>
+      <span class="step" data-step="3">Mode</span>
+      <span class="step" data-step="4">Privacy</span>
+    </nav>
 
-  <!-- Screen 2: How BRI Works -->
-  <div class="screen" id="screen-2">
-    <div class="card">
-      <h2>The Behavioral Reliance Index</h2>
-      <p>
-        Every session, Bounded computes a BRI score from 0.0 to 1.0
-        based on how much external code you accept without engaging
-        with it. The score has three states:
-      </p>
-      <div class="bri-explainer">
-        <div class="level">
-          <div class="dot low"></div>
-          <span><strong>Low (0.0 – 0.40)</strong> — You are writing independently.</span>
+    <section class="screen active" id="screen-1">
+      <div class="intro-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">Coding coach for VS Code</span>
+          <h1>Stay in control of your own thinking!</h1>
+          <p>
+            Bounded watches coding behavior, not code content, and helps you notice
+            when inserted code starts to replace active understanding.
+          </p>
         </div>
-        <div class="level">
-          <div class="dot moderate"></div>
-          <span><strong>Moderate (0.41 – 0.74)</strong> — Some reliance detected.</span>
-        </div>
-        <div class="level">
-          <div class="dot severe"></div>
-          <span><strong>Severe (0.75 – 1.0)</strong> — Consider slowing down.</span>
+        <div class="preview-panel">
+          <div class="preview-header">
+            <span>BRI</span><strong>24</strong>
+          </div>
+          <div class="preview-meter"><span></span></div>
+          <dl>
+            <div><dt>Lines Typed</dt><dd>86</dd></div>
+            <div><dt>Lines Inserted</dt><dd>18</dd></div>
+            <div><dt>Writing Streak</dt><dd>22</dd></div>
+          </dl>
         </div>
       </div>
-    </div>
-    <div class="nav">
-      <button class="btn-ghost"    id="btn-back-2">Back</button>
-      <button class="btn-primary"  id="btn-next-2">Next</button>
-    </div>
-    <div class="dots-nav">
-      <div class="dot-nav"></div>
-      <div class="dot-nav active"></div>
-      <div class="dot-nav"></div>
-      <div class="dot-nav"></div>
-    </div>
-  </div>
+    </section>
 
-  <!-- Screen 3: Choose Mode -->
-  <div class="screen" id="screen-3">
-    <div class="card">
-      <h2>Choose Your Mode</h2>
-      <p>You can change this any time from the sidebar.</p>
-      <div class="mode-cards">
-        <div class="mode-card selected" id="card-standard">
-          <h3>Standard</h3>
-          <p>Silent until BRI reaches severe. One alert per climb.</p>
-        </div>
-        <div class="mode-card" id="card-strict">
-          <h3>Strict</h3>
-          <p>Nudges at moderate. Escalates at severe.</p>
+    <section class="screen" id="screen-2">
+      <div class="content-panel">
+        <span class="eyebrow">Behavioral Reliance Index</span>
+        <h1>BRI is a score from 0 to 100.</h1>
+        <p>
+          The score rises when large inserted blocks are accepted without meaningful
+          changes, and falls as you write more code yourself.
+        </p>
+        <div class="bri-levels">
+          <div><span class="dot low"></span><strong>Low</strong><em>0-40</em></div>
+          <div><span class="dot moderate"></span><strong>Moderate</strong><em>41-74</em></div>
+          <div><span class="dot severe"></span><strong>Severe</strong><em>75-100</em></div>
         </div>
       </div>
-    </div>
-    <div class="nav">
-      <button class="btn-ghost"   id="btn-back-3">Back</button>
-      <button class="btn-primary" id="btn-next-3">Next</button>
-    </div>
-    <div class="dots-nav">
-      <div class="dot-nav"></div>
-      <div class="dot-nav"></div>
-      <div class="dot-nav active"></div>
-      <div class="dot-nav"></div>
-    </div>
-  </div>
+    </section>
 
-  <!-- Screen 4: Privacy + Get Started -->
-  <div class="screen" id="screen-4">
-    <div class="card">
-      <h2>Your Privacy</h2>
-      <ul class="privacy-list">
-        <li>No code content is ever read or stored</li>
-        <li>No data leaves your machine</li>
-        <li>No internet connection required</li>
-        <li>Only behavioral metadata is tracked</li>
-        <li>You can uninstall at any time</li>
-      </ul>
-    </div>
-    <div class="nav">
-      <button class="btn-ghost"   id="btn-back-4">Back</button>
-      <button class="btn-primary" id="btn-complete">Start Using Bounded</button>
-    </div>
-    <div class="dots-nav">
-      <div class="dot-nav"></div>
-      <div class="dot-nav"></div>
-      <div class="dot-nav"></div>
-      <div class="dot-nav active"></div>
-    </div>
-  </div>
+    <section class="screen" id="screen-3">
+      <div class="content-panel">
+        <span class="eyebrow">Choose a nudge level</span>
+        <h1>Pick how early Bounded should speak up.</h1>
+        <div class="mode-cards">
+          <button class="mode-card selected" id="card-standard">
+            <strong>Standard</strong>
+            <span>Silent until severe dependency is detected.</span>
+          </button>
+          <button class="mode-card" id="card-strict">
+            <strong>Strict</strong>
+            <span>More frequent alerts, begins at moderate dependency.</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-4">
+      <div class="content-panel">
+        <span class="eyebrow">Local by design</span>
+        <h1>Your code stays yours.</h1>
+        <ul class="privacy-list">
+          <li>No code content is stored</li>
+          <li>No data leaves your machine</li>
+          <li>Only counts and scores are tracked</li>
+          <li>You can change mode any time</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="nav">
+      <button class="btn-secondary" id="btn-back">Back</button>
+      <button class="btn-secondary" id="btn-skip">Skip</button>
+      <button class="btn-primary" id="btn-next">Get Started</button>
+    </footer>
+  </main>
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    const savedState = vscode.getState() || {};
     let selectedMode = 'Standard';
     let currentScreen = 1;
 
+    const backBtn = document.getElementById('btn-back');
+    const nextBtn = document.getElementById('btn-next');
+    const skipBtn = document.getElementById('btn-skip');
+    const themeBtn = document.getElementById('theme-btn');
+
+    function applyTheme(theme) {
+      document.body.dataset.theme = theme;
+      themeBtn.textContent = theme === 'light' ? 'Dark' : 'Light';
+      themeBtn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+      vscode.setState({ ...savedState, theme });
+    }
+
     function goTo(n) {
       document.getElementById('screen-' + currentScreen).classList.remove('active');
-      const newScreen = document.getElementById('screen-' + n);
-      newScreen.classList.add('active');
-      currentScreen = n;
-
-      // Update dot indicators for the newly active screen
-      const dots = newScreen.querySelectorAll('.dot-nav');
-      dots.forEach(function(dot, i) {
-        dot.classList.toggle('active', i + 1 === n);
+      document.getElementById('screen-' + n).classList.add('active');
+      document.querySelectorAll('.step').forEach(step => {
+        step.classList.toggle('active', Number(step.dataset.step) === n);
       });
+      currentScreen = n;
+      backBtn.disabled = currentScreen === 1;
+      nextBtn.textContent = currentScreen === 4 ? 'Start Using Bounded' : 'Next';
     }
 
     function selectMode(mode) {
@@ -232,40 +198,33 @@ export class OnboardingFlow {
       document.getElementById('card-strict').classList.toggle('selected', mode === 'Strict');
     }
 
-    // ── Wire navigation buttons via addEventListener (inline onclick is
-    //    blocked by the CSP nonce policy) ──────────────────────────────────
-    document.getElementById('btn-get-started').addEventListener('click', function() { goTo(2); });
-    document.getElementById('btn-skip').addEventListener('click', function() {
-      vscode.postMessage({ command: 'skip' });
+    applyTheme(savedState.theme || 'dark');
+    goTo(1);
+
+    backBtn.addEventListener('click', () => goTo(Math.max(1, currentScreen - 1)));
+    nextBtn.addEventListener('click', () => {
+      if (currentScreen === 4) {
+        vscode.postMessage({ command: 'complete', mode: selectedMode });
+      } else {
+        goTo(currentScreen + 1);
+      }
     });
-
-    document.getElementById('btn-back-2').addEventListener('click', function() { goTo(1); });
-    document.getElementById('btn-next-2').addEventListener('click', function() { goTo(3); });
-
-    document.getElementById('card-standard').addEventListener('click', function() { selectMode('Standard'); });
-    document.getElementById('card-strict').addEventListener('click', function() { selectMode('Strict'); });
-
-    document.getElementById('btn-back-3').addEventListener('click', function() { goTo(2); });
-    document.getElementById('btn-next-3').addEventListener('click', function() { goTo(4); });
-
-    document.getElementById('btn-back-4').addEventListener('click', function() { goTo(3); });
-    document.getElementById('btn-complete').addEventListener('click', function() {
-      vscode.postMessage({ command: 'complete', mode: selectedMode });
+    skipBtn.addEventListener('click', () => vscode.postMessage({ command: 'skip' }));
+    themeBtn.addEventListener('click', () => {
+      applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
     });
+    document.getElementById('card-standard').addEventListener('click', () => selectMode('Standard'));
+    document.getElementById('card-strict').addEventListener('click', () => selectMode('Strict'));
   </script>
-
 </body>
 </html>`;
   }
 
   private _getNonce(): string {
     let text = '';
-    const possible =
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     for (let i = 0; i < 32; i++) {
-      text += possible.charAt(
-        Math.floor(Math.random() * possible.length)
-      );
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
   }

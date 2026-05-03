@@ -1,17 +1,6 @@
 /**
  * dashboardPanel.ts
  * Full dashboard WebView panel for the Bounded extension.
- *
- * Displays BRI trend line chart (canvas), session history table,
- * behavioral pattern cards, and an on-demand HTML report preview
- * rendered inside an iframe from a local blob URL.
- *
- * Architecture: Presentation layer only — never reads from data layer directly.
- * All data flows through ReportGenerator (business layer).
- * postMessage / onDidReceiveMessage is the only channel between
- * this WebView and the extension host (architectural hard rule).
- *
- * FR-10: No code content is ever stored, logged, or rendered here.
  */
 
 import * as vscode from 'vscode';
@@ -38,7 +27,7 @@ export class DashboardPanel {
 
     const panel = vscode.window.createWebviewPanel(
       DashboardPanel.viewType,
-      'Bounded — Dashboard',
+      'Bounded - Dashboard',
       column,
       {
         enableScripts: true,
@@ -48,9 +37,7 @@ export class DashboardPanel {
       }
     );
 
-    DashboardPanel.currentPanel = new DashboardPanel(
-      panel, context, reportGenerator
-    );
+    DashboardPanel.currentPanel = new DashboardPanel(panel, context, reportGenerator);
   }
 
   private constructor(
@@ -60,13 +47,8 @@ export class DashboardPanel {
   ) {
     this._panel = panel;
     this._update(context, reportGenerator);
-    this._panel.onDidDispose(
-      () => this.dispose(),
-      null,
-      this._disposables
-    );
+    this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
-    // Handle messages from dashboard WebView
     this._panel.webview.onDidReceiveMessage(
       async (message: { command: string }) => {
         switch (message.command) {
@@ -100,26 +82,24 @@ export class DashboardPanel {
       vscode.Uri.joinPath(context.extensionUri, 'media', 'dashboard.css')
     );
     const nonce = this._getNonce();
-    this._panel.webview.html = this._getHtmlContent(
-      cssUri, nonce, report, reportGenerator
-    );
+    this._panel.webview.html = this._getHtmlContent(cssUri, nonce, report);
   }
 
   private _getHtmlContent(
     cssUri: vscode.Uri,
     nonce: string,
-    report: SessionReport,
-    reportGenerator: ReportGenerator
+    report: SessionReport
   ): string {
     const historyJson = JSON.stringify(report.history);
     const patternCards = report.patterns.map(p =>
       `<div class="pattern-card ${p.severity}">${p.description}</div>`
-    ).join('') || '<p>No significant patterns detected this session.</p>';
+    ).join('') || '<p class="empty-state">No significant patterns detected this session.</p>';
+    const briScore = Math.round(report.currentBRI * 100);
 
     const historyRows = report.history.map(s => `
       <tr>
         <td>${s.date}</td>
-        <td>${s.finalBRI.toFixed(2)}</td>
+        <td>${Math.round(s.finalBRI * 100)}</td>
         <td>${s.linesTyped}</td>
         <td>${s.linesPasted}</td>
         <td>${s.modeActive}</td>
@@ -139,50 +119,72 @@ export class DashboardPanel {
 </head>
 <body>
   <div class="dashboard-header">
-    <h1>Bounded Dashboard</h1>
-    <span class="session-badge">
-      BRI: ${report.currentBRI.toFixed(2)} — ${report.stateLabel.toUpperCase()}
-    </span>
+    <div>
+      <h1>Bounded</h1>
+      <p>Session awareness for independent coding</p>
+    </div>
+    <div class="dashboard-tools">
+      <button class="theme-toggle" id="theme-btn">Light</button>
+      <div class="bri-badge ${report.stateLabel}">
+        <span>BRI</span>
+        <strong>${briScore}</strong>
+        <em>${report.stateLabel.toUpperCase()}</em>
+      </div>
+    </div>
   </div>
 
-  <div class="chart-container">
+  <section class="metric-strip">
+    <div class="metric"><span>Lines Typed</span><strong>${report.snapshot.linesTyped}</strong></div>
+    <div class="metric"><span>Lines Inserted</span><strong>${report.snapshot.linesPasted}</strong></div>
+    <div class="metric"><span>Insert Events</span><strong>${report.snapshot.pasteEventCount}</strong></div>
+    <div class="metric"><span>Writing Streak</span><strong>${report.snapshot.longestTypingStreak}</strong></div>
+  </section>
+
+  <section class="chart-container">
     <h2>BRI Trend</h2>
     <canvas id="trend-chart" width="600" height="160"></canvas>
-  </div>
+  </section>
 
-  <div class="patterns-section">
+  <section class="patterns-section">
     <h2>Detected Patterns</h2>
     ${patternCards}
-  </div>
+  </section>
 
-  <h2>Session History</h2>
-  <table class="history-table">
-    <thead>
-      <tr>
-        <th>Date</th><th>BRI</th>
-        <th>Typed</th><th>Pasted</th><th>Mode</th>
-      </tr>
-    </thead>
-    <tbody>${historyRows}</tbody>
-  </table>
+  <section class="history-section">
+    <h2>Session History</h2>
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>BRI</th><th>Typed</th><th>Inserted</th><th>Mode</th>
+        </tr>
+      </thead>
+      <tbody>${historyRows}</tbody>
+    </table>
+  </section>
 
   <div class="actions-bar">
     <button class="btn-primary" id="generate-btn">Generate Report</button>
-    <button class="btn-secondary" id="save-btn">Save as PDF</button>
+    <button class="btn-secondary" id="save-btn">Save Report</button>
   </div>
 
-  <div id="report-preview" style="display:none; margin-top:24px;">
+  <div id="report-preview" class="report-preview">
     <h2>Report Preview</h2>
-    <iframe id="report-frame"
-      style="width:100%;height:500px;border:none;background:#1e1e1e;">
-    </iframe>
+    <iframe id="report-frame"></iframe>
   </div>
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const history = ${historyJson};
+    const savedState = vscode.getState() || {};
 
-    // Draw BRI trend line chart on canvas
+    function applyTheme(theme) {
+      document.body.dataset.theme = theme;
+      document.getElementById('theme-btn').textContent = theme === 'light' ? 'Dark' : 'Light';
+      vscode.setState({ ...savedState, theme });
+    }
+
+    applyTheme(savedState.theme || 'dark');
+
     const canvas = document.getElementById('trend-chart');
     const ctx = canvas.getContext('2d');
     const W = canvas.width;
@@ -195,8 +197,7 @@ export class DashboardPanel {
         y: H - pad - (s.finalBRI * (H - pad * 2))
       }));
 
-      // Draw grid lines at 0.25, 0.50, 0.75
-      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.strokeStyle = 'rgba(128,128,128,0.25)';
       ctx.lineWidth = 1;
       [0.25, 0.50, 0.75].forEach(level => {
         const y = H - pad - (level * (H - pad * 2));
@@ -206,39 +207,39 @@ export class DashboardPanel {
         ctx.stroke();
       });
 
-      // Draw trend line
-      ctx.strokeStyle = '#569cd6';
+      ctx.strokeStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue('--vscode-charts-blue') || '#569cd6';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       points.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
       ctx.stroke();
 
-      // Draw dots
-      ctx.fillStyle = '#569cd6';
+      ctx.fillStyle = ctx.strokeStyle;
       points.forEach(p => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
         ctx.fill();
       });
     } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.font = '13px Arial';
+      ctx.fillStyle = 'rgba(128,128,128,0.8)';
+      ctx.font = '13px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Not enough history to show trend.', W / 2, H / 2);
     }
 
-    // Generate report button
     document.getElementById('generate-btn').addEventListener('click', () => {
       vscode.postMessage({ command: 'generateReport' });
     });
 
-    // Save PDF button
     document.getElementById('save-btn').addEventListener('click', () => {
       vscode.postMessage({ command: 'saveReport' });
     });
 
-    // Receive report HTML and show preview in iframe via blob URL
+    document.getElementById('theme-btn').addEventListener('click', () => {
+      applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
+    });
+
     window.addEventListener('message', (event) => {
       const msg = event.data;
       if (msg.command === 'reportReady') {
@@ -263,8 +264,7 @@ export class DashboardPanel {
 
   private _getNonce(): string {
     let text = '';
-    const possible =
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     for (let i = 0; i < 32; i++) {
       text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
