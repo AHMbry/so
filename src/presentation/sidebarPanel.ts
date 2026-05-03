@@ -114,7 +114,6 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
       <tr><td>Lines Typed</td>        <td id="lines-typed">0</td></tr>
       <tr><td>Lines Inserted</td>     <td id="lines-pasted">0</td></tr>
       <tr><td>Insert Events</td>      <td id="paste-count">0</td></tr>
-      <tr><td>Unmodified Inserts</td> <td id="unmodified">0</td></tr>
       <tr><td>Writing Streak</td>     <td id="streak">0</td></tr>
     </table>
   </section>
@@ -181,7 +180,6 @@ export class SidebarPanel implements vscode.WebviewViewProvider {
       document.getElementById('lines-typed').textContent = sessionSnapshot.linesTyped;
       document.getElementById('lines-pasted').textContent = sessionSnapshot.linesPasted;
       document.getElementById('paste-count').textContent = sessionSnapshot.pasteEventCount;
-      document.getElementById('unmodified').textContent = sessionSnapshot.unmodifiedPastes;
       document.getElementById('streak').textContent = sessionSnapshot.longestTypingStreak;
 
       modeBtn.textContent = 'Mode: ' + activeMode;

@@ -13,34 +13,35 @@ export class SessionTracker {
   private sessionId: string;
   private snapshot: SessionSnapshot;
   private currentTypingStreak: number = 0;
-  private modifiedPasteIds: Set<string> = new Set();
+  private activePasteLineCounts: Map<string, number> = new Map();
 
   constructor() {
     this.sessionId = `session_${Date.now()}`;
     this.snapshot = { ...DEFAULT_BRI_STATE.sessionSnapshot };
   }
 
-  /**
-   * Records an external paste event.
-   * Must only be called for EXTERNAL pastes (isInternal === false).
-   * FR-05: Unmodified pastes (modificationDepth === 0) increment unmodifiedPastes.
-   */
+  /** Records an external insert event. */
   public recordPaste(event: BehavioralEvent): void {
     this.snapshot.linesPasted += event.lineCount;
     this.snapshot.pasteEventCount += 1;
-    if (event.modificationDepth === 0) {
-      this.snapshot.unmodifiedPastes += 1;
-    }
+    this.activePasteLineCounts.set(event.eventId, event.lineCount);
     this.currentTypingStreak = 0; // paste breaks the typing streak
   }
 
-  /** Records that a previously unmodified paste has now been edited. */
-  public recordModification(eventId: string): void {
-    if (this.modifiedPasteIds.has(eventId)) {
+  /** Keeps inserted-line display in sync when part of an inserted block is removed. */
+  public recordInsertedLineRemoval(eventId: string, lineCount: number): void {
+    if (lineCount <= 0) {
       return;
     }
-    this.modifiedPasteIds.add(eventId);
-    this.snapshot.unmodifiedPastes = Math.max(0, this.snapshot.unmodifiedPastes - 1);
+
+    const currentLineCount = this.activePasteLineCounts.get(eventId) ?? 0;
+    const removedLineCount = Math.min(lineCount, currentLineCount);
+    if (removedLineCount <= 0) {
+      return;
+    }
+
+    this.activePasteLineCounts.set(eventId, currentLineCount - removedLineCount);
+    this.snapshot.linesPasted = Math.max(0, this.snapshot.linesPasted - removedLineCount);
   }
 
   /**
@@ -67,12 +68,10 @@ export class SessionTracker {
    * Does not adjust linesTyped or streaks.
    */
   public recordUndo(eventId: string, lineCount: number): void {
+    const activeLineCount = this.activePasteLineCounts.get(eventId) ?? lineCount;
     this.snapshot.pasteEventCount  = Math.max(0, this.snapshot.pasteEventCount - 1);
-    this.snapshot.linesPasted      = Math.max(0, this.snapshot.linesPasted - lineCount);
-    if (!this.modifiedPasteIds.has(eventId)) {
-      this.snapshot.unmodifiedPastes = Math.max(0, this.snapshot.unmodifiedPastes - 1);
-    }
-    this.modifiedPasteIds.delete(eventId);
+    this.snapshot.linesPasted      = Math.max(0, this.snapshot.linesPasted - activeLineCount);
+    this.activePasteLineCounts.delete(eventId);
   }
 
   /**
@@ -101,6 +100,6 @@ export class SessionTracker {
     this.sessionId = `session_${Date.now()}`;
     this.snapshot = { ...DEFAULT_BRI_STATE.sessionSnapshot };
     this.currentTypingStreak = 0;
-    this.modifiedPasteIds.clear();
+    this.activePasteLineCounts.clear();
   }
 }

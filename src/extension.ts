@@ -183,16 +183,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     },
 
     // onModificationDetected - a pasted block was edited after insertion (FR-05)
-    (eventId: string, modificationDepth: number) => {
+    (
+      eventId: string,
+      modificationDepth: number,
+      insertedLinesRemoved: number,
+      projectLineCount: number
+    ) => {
       console.log(
         `Bounded: paste modified - eventId: ${eventId}, depth: ${modificationDepth.toFixed(2)}`
       );
-      sessionTracker.recordModification(eventId);
+      sessionTracker.recordInsertedLineRemoval(eventId, insertedLinesRemoved);
       const updatedState = briCalculator.processModification(
         eventId,
         modificationDepth,
         modeManager.getMode(),
-        sessionTracker.getSnapshot()
+        sessionTracker.getSnapshot(),
+        projectLineCount
       );
       sessionTracker.updateBRIDelta(
         briCalculator.getCurrentBRI(),

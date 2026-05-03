@@ -82,7 +82,7 @@ export class OnboardingFlow {
     <nav class="progress" aria-label="Onboarding progress">
       <span class="step active" data-step="1">Welcome</span>
       <span class="step" data-step="2">BRI</span>
-      <span class="step" data-step="3">Mode</span>
+      <span class="step" data-step="3">Mode selection</span>
       <span class="step" data-step="4">Privacy</span>
     </nav>
 
@@ -113,7 +113,7 @@ export class OnboardingFlow {
     <section class="screen" id="screen-2">
       <div class="content-panel">
         <span class="eyebrow">Behavioral Reliance Index</span>
-        <h1>BRI is a score from 0 to 100.</h1>
+        <h1>BRI shows how much (or how little) you are engaging with your code.</h1>
         <p>
           The score rises when large inserted blocks are accepted without meaningful
           changes, and falls as you write more code yourself.
@@ -128,8 +128,8 @@ export class OnboardingFlow {
 
     <section class="screen" id="screen-3">
       <div class="content-panel">
-        <span class="eyebrow">Choose a nudge level</span>
-        <h1>Pick how early Bounded should speak up.</h1>
+        <span class="eyebrow">Choose an alert level</span>
+        <h1>Pick how early Bounded should notify you about your coding behavior.</h1>
         <div class="mode-cards">
           <button class="mode-card selected" id="card-standard">
             <strong>Standard</strong>

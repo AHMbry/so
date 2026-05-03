@@ -79,17 +79,7 @@ export class ReportGenerator {
       });
     }
 
-    // Pattern 2: Many unmodified inserts (>50% of insert events left untouched)
-    if (snapshot.pasteEventCount > 0 &&
-        snapshot.unmodifiedPastes / snapshot.pasteEventCount > 0.5) {
-      patterns.push({
-        id: 'unmodified-pastes',
-        description: `${snapshot.unmodifiedPastes} of ${snapshot.pasteEventCount} inserts were accepted without any modification.`,
-        severity: 'warning',
-      });
-    }
-
-    // Pattern 3: BRI trending upward across the last 3 sessions
+    // Pattern 2: BRI trending upward across the last 3 sessions
     if (history.length >= 3) {
       const [a, b, c] = history.slice(-3);
       if (c.finalBRI > b.finalBRI && b.finalBRI > a.finalBRI) {
@@ -104,7 +94,7 @@ export class ReportGenerator {
       }
     }
 
-    // Pattern 4: No typing at all this session
+    // Pattern 3: No typing at all this session
     if (snapshot.linesTyped === 0 && snapshot.linesPasted > 0) {
       patterns.push({
         id: 'no-typing',
@@ -193,7 +183,6 @@ export class ReportGenerator {
     <tr><td>Lines Inserted</td><td>${report.snapshot.linesPasted}</td></tr>
     <tr><td>Inserted Ratio</td><td>${pasteRatio}</td></tr>
     <tr><td>Insert Events</td><td>${report.snapshot.pasteEventCount}</td></tr>
-    <tr><td>Unmodified Inserts</td><td>${report.snapshot.unmodifiedPastes}</td></tr>
     <tr><td>Longest Typing Streak</td><td>${report.snapshot.longestTypingStreak} lines</td></tr>
     <tr><td>BRI Change This Session</td><td>${report.snapshot.briDeltaSinceStart >= 0 ? '+' : ''}${Math.round(report.snapshot.briDeltaSinceStart * 100)}</td></tr>
   </table>
