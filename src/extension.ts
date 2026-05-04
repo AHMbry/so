@@ -147,7 +147,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         briCalculator.getCurrentBRI(),
         0
       );
-      alertController.check(updatedState.stateLabel);
+      alertController.check(updatedState.stateLabel, true);
       updateStatusBar(
         statusBar,
         briCalculator.getCurrentBRI(),

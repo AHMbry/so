@@ -60,7 +60,7 @@ export class EventListenerModule {
       insertedLinesRemoved: number,
       projectLineCount: number
     ) => void,
-    private readonly onWorkspaceSaved: () => void,
+    private readonly onWorkspaceSaved: () => Promise<void>,
     private readonly onTypingDetected: (linesAdded: number) => void,
     private readonly onFileCleared: () => void
   ) {}
@@ -312,7 +312,9 @@ export class EventListenerModule {
     });
 
     const saveListener = vscode.workspace.onDidSaveTextDocument(() => {
-      this.onWorkspaceSaved();
+      this.onWorkspaceSaved().catch(err =>
+        console.error('Bounded: failed to save BRI state:', err)
+      );
     });
 
     this.context.subscriptions.push(changeListener, saveListener);
@@ -514,10 +516,6 @@ export class EventListenerModule {
 
     const previousLine = previousLines[change.range.start.line] ?? '';
     return previousLine.trim() === '';
-  }
-
-  private getTrackedRangeLineCount(range: TrackedRange): number {
-    return Math.max(0, range.endLine - range.startLine + 1);
   }
 
   private getRemovedNonEmptyLineCount(

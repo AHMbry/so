@@ -48,7 +48,7 @@ export class BRICalculator {
     sessionSnapshot: SessionSnapshot
   ): BRIState {
     if (!event.isInternal && event.lineCount >= 3) {
-      const baseContribution = Math.min(0.05 + event.lineCount * 0.005, 0.15);
+      const baseContribution = Math.min(0.08 + event.lineCount * 0.01, 0.20);
       const rawModificationDepth = this.clamp01(event.modificationDepth);
       const projectLineCount = Math.max(
         event.lineCount,
@@ -188,10 +188,10 @@ export class BRICalculator {
     const pasteRatio = totalLines > 0 ? snapshot.linesPasted / totalLines : 0;
     const typedRatio = totalLines > 0 ? snapshot.linesTyped / totalLines : 0;
 
-    const pasteVolume = Math.min(snapshot.pasteEventCount * 0.01, 0.08);
-    const pasteRatioLoad = Math.max(0, pasteRatio - 0.5) * 0.16;
-    const typingCredit = Math.min(snapshot.longestTypingStreak * 0.003, 0.1);
-    const typedRatioCredit = typedRatio * 0.05;
+    const pasteVolume = Math.min(snapshot.pasteEventCount * 0.015, 0.10);
+    const pasteRatioLoad = Math.max(0, pasteRatio - 0.4) * 0.18;
+    const typingCredit = Math.min(snapshot.longestTypingStreak * 0.002, 0.08);
+    const typedRatioCredit = typedRatio * 0.04;
 
     return pasteVolume + pasteRatioLoad - typingCredit - typedRatioCredit;
   }
@@ -204,7 +204,7 @@ export class BRICalculator {
       (c) => now - c.occurredAtMs <= tenMinutesMs
     ).length;
 
-    return Math.min(Math.max(0, recentPasteCount - 3) * 0.03, 0.15);
+    return Math.min(Math.max(0, recentPasteCount - 2) * 0.04, 0.12);
   }
 
   private recalculate(

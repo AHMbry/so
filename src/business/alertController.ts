@@ -28,17 +28,26 @@ export class AlertController {
    *   - The mode says we should alert for this label, AND
    *   - We have not already alerted for this label (deduplication).
    * Resets the latch when BRI returns to 'low'.
+   *
+   * isInsertEvent: when true and mode is Strict and threshold is already reached,
+   * skips deduplication so every subsequent insert fires a nudge.
    */
-  public check(stateLabel: BRIStateLabel): void {
+  public check(stateLabel: BRIStateLabel, isInsertEvent: boolean = false): void {
     if (stateLabel === 'low') {
-      this.lastAlertedLabel = null; // reset — allow future alerts on next escalation
+      this.lastAlertedLabel = null;
       return;
     }
 
-    if (
-      this.modeManager.shouldAlert(stateLabel) &&
-      stateLabel !== this.lastAlertedLabel
-    ) {
+    if (!this.modeManager.shouldAlert(stateLabel)) {
+      return;
+    }
+
+    const alreadyAtThreshold =
+      this.lastAlertedLabel !== null && stateLabel === this.lastAlertedLabel;
+    const strictRepeat =
+      isInsertEvent && this.modeManager.getMode() === 'Strict' && alreadyAtThreshold;
+
+    if (!alreadyAtThreshold || strictRepeat) {
       this.lastAlertedLabel = stateLabel;
       this.onAlert(stateLabel);
     }
