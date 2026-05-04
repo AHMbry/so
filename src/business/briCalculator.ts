@@ -133,6 +133,12 @@ export class BRICalculator {
     return this.currentBRI;
   }
 
+  public reset(): void {
+    this.contributions.clear();
+    this.currentBRI = 0;
+    this.startBRI = 0;
+  }
+
   /** Derives the severity label from the current BRI value. */
   public getStateLabel(): BRIStateLabel {
     if (this.currentBRI <= 0.40) return 'low';

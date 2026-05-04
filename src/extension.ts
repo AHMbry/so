@@ -248,6 +248,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         modeManager.getMode()
       );
       sidebarPanel.updateState(currentState());
+    },
+
+    // onFileCleared — document wiped to empty; reset all session counters
+    () => {
+      sessionTracker.reset();
+      briCalculator.reset();
+      updateStatusBar(statusBar, 0, 'low', modeManager.getMode());
+      sidebarPanel.updateState(currentState());
     }
   );
 

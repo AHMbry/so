@@ -61,7 +61,8 @@ export class EventListenerModule {
       projectLineCount: number
     ) => void,
     private readonly onWorkspaceSaved: () => void,
-    private readonly onTypingDetected: (linesAdded: number) => void
+    private readonly onTypingDetected: (linesAdded: number) => void,
+    private readonly onFileCleared: () => void
   ) {}
 
   public activate(sessionId: string): void {
@@ -149,6 +150,7 @@ export class EventListenerModule {
       }
 
       const handledByInsertTracking = new Set<number>();
+      const insertedLinesRemovedPerChange = new Map<number, number>();
 
       for (let ci = 0; ci < e.contentChanges.length; ci++) {
         const c = e.contentChanges[ci];
@@ -254,6 +256,12 @@ export class EventListenerModule {
               modifiedLineCount / Math.max(1, tracked.event.lineCount)
             );
             tracked.event.modificationDepth = modificationDepth;
+            if (insertedLinesRemoved > 0) {
+              insertedLinesRemovedPerChange.set(
+                ci,
+                (insertedLinesRemovedPerChange.get(ci) ?? 0) + insertedLinesRemoved
+              );
+            }
             setImmediate(() =>
               this.onModificationDetected(
                 tracked.event.eventId,
@@ -277,11 +285,24 @@ export class EventListenerModule {
       this.trackRemovedText(e.contentChanges, previousLines, handledByInsertTracking);
 
       const currentLines = this.snapshotLines(e.document);
+
+      const wasNonEmpty = this.countNonEmptyLines(previousLines) > 0;
+      const isNowEmpty = this.countNonEmptyLines(currentLines) === 0;
+      if (wasNonEmpty && isNowEmpty) {
+        this.recentPastes = [];
+        this.neutralInsertRanges = [];
+        this.documentLineSnapshots.set(documentKey, currentLines);
+        this.workspaceTextCache.set(documentKey, e.document.getText());
+        setImmediate(() => this.onFileCleared());
+        return;
+      }
+
       const netLineDelta = this.calculateTypedLineDelta(
         e.contentChanges,
         previousLines,
         currentLines,
-        handledByInsertTracking
+        handledByInsertTracking,
+        insertedLinesRemovedPerChange
       );
       this.documentLineSnapshots.set(documentKey, currentLines);
       this.workspaceTextCache.set(documentKey, e.document.getText());
@@ -359,17 +380,22 @@ export class EventListenerModule {
     changes: readonly vscode.TextDocumentContentChangeEvent[],
     previousLines: readonly string[],
     currentLines: readonly string[],
-    handledChangeIndices: ReadonlySet<number>
+    handledChangeIndices: ReadonlySet<number>,
+    insertedLinesRemovedPerChange: ReadonlyMap<number, number> = new Map()
   ): number {
     if (handledChangeIndices.size === 0) {
       return this.countNonEmptyLines(currentLines) - this.countNonEmptyLines(previousLines);
     }
 
     return changes.reduce((delta, change, index) => {
-      if (handledChangeIndices.has(index)) {
-        return delta;
+      if (!handledChangeIndices.has(index)) {
+        return delta + this.calculateSingleChangeLineDelta(change, previousLines);
       }
-      return delta + this.calculateSingleChangeLineDelta(change, previousLines);
+      // For changes that touched an inserted range, compute the typed portion:
+      // total line delta minus the inserted lines already accounted for by recordInsertedLineRemoval.
+      const changeLineDelta = this.calculateSingleChangeLineDelta(change, previousLines);
+      const insertedRemoved = insertedLinesRemovedPerChange.get(index) ?? 0;
+      return delta + changeLineDelta + insertedRemoved;
     }, 0);
   }
 
@@ -498,8 +524,15 @@ export class EventListenerModule {
     previousLines: readonly string[],
     range: vscode.Range
   ): number {
+    // Intra-line deletion (backspace/delete on chars within one line) never removes a whole line.
+    if (range.start.line === range.end.line) {
+      return 0;
+    }
     const removedText = this.getTextFromPreviousRange(previousLines, range);
-    return this.countNonEmptyLines(removedText.split('\n'));
+    const nonEmptyCount = this.countNonEmptyLines(removedText.split('\n'));
+    // When the removed text is only whitespace/newlines (e.g. merging two lines via
+    // backspace at col 0), nonEmptyCount is 0 but one line boundary was still crossed.
+    return Math.max(nonEmptyCount, range.end.line - range.start.line);
   }
 
   private changeTouchesTrackedRange(
