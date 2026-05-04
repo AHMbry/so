@@ -62,7 +62,4 @@ export async function writeBRIState(
 
   const updated: BRIState = { ...state, lastSaved: new Date().toISOString() };
   await fs.writeFile(getBRIStatePath(context), JSON.stringify(updated, null, 2), 'utf-8');
-
-  // TODO: Phase 4 — notify BRI Calculator that state has been persisted
-  // TODO: Phase 6 — trigger Sidebar Panel refresh after write
 }

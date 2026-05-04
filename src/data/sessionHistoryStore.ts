@@ -74,6 +74,4 @@ export async function appendSessionRecord(
     JSON.stringify(trimmed, null, 2),
     'utf-8'
   );
-
-  // TODO: Phase 7 — notify Dashboard Panel to refresh session history chart
 }

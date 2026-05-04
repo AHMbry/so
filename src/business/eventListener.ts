@@ -27,8 +27,8 @@ interface TrackedRange {
 
 /**
  * Inserted-code event enriched with document ranges.
- * Ranges let us track multi-location AI edits without treating everything
- * between the first and last edit as inserted code.
+ * Ranges let us track multi-location insertions without treating everything
+ * between the first and last change as inserted code.
  */
 interface TrackedPaste {
   event: BehavioralEvent;
@@ -101,7 +101,7 @@ export class EventListenerModule {
         .filter(([key]) => key !== documentKey)
         .map(([, text]) => text)
         .concat(isUndoOrRedo ? this.recentRemovals.map((removal) => removal.text) : []);
-      const minInsertedLines = this.isLikelyAgentInsert(e.contentChanges) ? 1 : undefined;
+      const minInsertedLines = this.isMultiChangeInsert(e.contentChanges) ? 1 : undefined;
       const pasteEvent = classifyPasteEvent(
         e,
         this.sessionId,
@@ -601,7 +601,7 @@ export class EventListenerModule {
     );
   }
 
-  private isLikelyAgentInsert(
+  private isMultiChangeInsert(
     changes: readonly vscode.TextDocumentContentChangeEvent[]
   ): boolean {
     const insertedTexts = changes

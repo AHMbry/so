@@ -93,7 +93,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   statusBar.tooltip = 'Bounded — Behavioral Reliance Index';
   statusBar.command = 'bounded.openDashboard';
   statusBar.show();
-  // TODO: Phase 7 — move status bar management into statusBarItem.ts presenter
 
   /** Convenience: builds the full BRIState snapshot from all live sources. */
   function currentState(): BRIState {
@@ -110,9 +109,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const alertController = new AlertController(
     modeManager,
     (label: BRIStateLabel) => {
-      // TODO: Phase 6 — replace with dismissible inline alert banner (NF-03)
       console.log(`Bounded: ALERT — BRI state is now ${label}`);
-      // NF-06: neutral language only — no punishment words
       vscode.window
         .showWarningMessage(
           `Bounded: Your reliance index is ${label}. Consider writing the next block yourself.`,
@@ -155,7 +152,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         modeManager.getMode()
       );
       sidebarPanel.updateState(currentState());
-      // TODO: Phase 7 — push live BRI delta to open dashboard via postMessage
     },
 
     // onUndoDetected — a previous external paste was reversed (FR-06)
@@ -179,7 +175,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         modeManager.getMode()
       );
       sidebarPanel.updateState(currentState());
-      // TODO: Phase 7 — push live BRI delta to open dashboard via postMessage
     },
 
     // onModificationDetected - a pasted block was edited after insertion (FR-05)

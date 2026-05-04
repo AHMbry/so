@@ -13,7 +13,7 @@ export class OnboardingFlow {
   constructor(private context: vscode.ExtensionContext) {}
 
   public isComplete(): boolean {
-    return false;
+    return this.context.globalState.get<boolean>('bounded.onboardingComplete', false);
   }
 
   public show(): void {

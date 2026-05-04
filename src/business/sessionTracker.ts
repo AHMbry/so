@@ -44,11 +44,7 @@ export class SessionTracker {
     this.snapshot.linesPasted = Math.max(0, this.snapshot.linesPasted - removedLineCount);
   }
 
-  /**
-   * Records manually typed lines.
-   * Increments the typing streak and updates the longest streak if exceeded.
-   * TODO: Phase 4 — wired from EventListener's typing-change detection
-   */
+  /** Records manually typed lines. Increments streak and updates longest if exceeded. */
   public recordTyping(linesChanged: number): void {
     if (linesChanged > 0) {
       this.snapshot.linesTyped     += linesChanged;
@@ -74,10 +70,7 @@ export class SessionTracker {
     this.activePasteLineCounts.delete(eventId);
   }
 
-  /**
-   * Updates the BRI delta since session start.
-   * TODO: Phase 4 — called by BRI Calculator after every BRI update
-   */
+  /** Updates the BRI delta since session start. */
   public updateBRIDelta(currentBRI: number, startBRI: number): void {
     this.snapshot.briDeltaSinceStart = currentBRI - startBRI;
   }
@@ -91,11 +84,7 @@ export class SessionTracker {
     return this.sessionId;
   }
 
-  /**
-   * Resets all counters and generates a new session ID.
-   * Called when starting a fresh session (e.g., after report generation).
-   * TODO: Phase 7 — invoked by ReportGenerator after session is finalised
-   */
+  /** Resets all counters and generates a new session ID. */
   public reset(): void {
     this.sessionId = `session_${Date.now()}`;
     this.snapshot = { ...DEFAULT_BRI_STATE.sessionSnapshot };

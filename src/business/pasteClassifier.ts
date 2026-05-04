@@ -1,7 +1,7 @@
 /**
  * pasteClassifier.ts
  * Determines whether a VS Code TextDocumentChangeEvent qualifies as inserted
- * external code, including clipboard pastes and AI-agent edits.
+ * external code, including clipboard pastes and multi-change code insertions.
  *
  * FR-04: Internal inserts must never affect BRI.
  * FR-10: No code content is ever logged, stored, or transmitted.
