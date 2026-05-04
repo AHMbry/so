@@ -14,6 +14,55 @@ import { BehavioralEvent } from '../types';
 /** Minimum number of inserted lines for a change to affect BRI. */
 const MIN_INSERTED_LINES = 3;
 
+function normalizeForInternalComparison(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
+}
+
+function normalizeCodeBlockLines(text: string): string[] {
+  return normalizeForInternalComparison(text)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+}
+
+export function containsInsertedCode(sourceText: string, insertedText: string): boolean {
+  const normalizedInsert = normalizeForInternalComparison(insertedText);
+  if (normalizedInsert === '') {
+    return true;
+  }
+
+  const normalizedSource = normalizeForInternalComparison(sourceText);
+  if (normalizedSource.includes(normalizedInsert)) {
+    return true;
+  }
+
+  const insertedLines = normalizeCodeBlockLines(insertedText);
+  if (insertedLines.length < MIN_INSERTED_LINES) {
+    return false;
+  }
+
+  const sourceLines = normalizeCodeBlockLines(sourceText);
+  for (let i = 0; i <= sourceLines.length - insertedLines.length; i++) {
+    let matches = true;
+    for (let j = 0; j < insertedLines.length; j++) {
+      if (sourceLines[i + j] !== insertedLines[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Checks whether insertedText exists verbatim in any open workspace document
  * other than the document that was just changed.
@@ -26,11 +75,14 @@ function isInternalInsert(
   previousDocumentText?: string,
   internalSourceTexts: readonly string[] = []
 ): boolean {
-  if (previousDocumentText?.includes(insertedText)) {
+  if (
+    previousDocumentText !== undefined &&
+    containsInsertedCode(previousDocumentText, insertedText)
+  ) {
     return true;
   }
 
-  if (internalSourceTexts.some((text) => text.includes(insertedText))) {
+  if (internalSourceTexts.some((text) => containsInsertedCode(text, insertedText))) {
     return true;
   }
 
@@ -38,7 +90,7 @@ function isInternalInsert(
     if (doc === excludeDoc) {
       continue;
     }
-    if (doc.getText().includes(insertedText)) {
+    if (containsInsertedCode(doc.getText(), insertedText)) {
       return true;
     }
   }

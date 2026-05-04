@@ -132,13 +132,32 @@ export class EventListenerModule {
           for (let ri = tracked.ranges.length - 1; ri >= 0; ri--) {
             const range = tracked.ranges[ri];
 
-            if (changeStart <= range.startLine && changeEnd >= range.endLine) {
+            if (
+              c.text.trim() === '' &&
+              !c.range.isEmpty &&
+              changeStart <= range.startLine &&
+              changeEnd >= range.endLine
+            ) {
               tracked.ranges.splice(ri, 1);
               consumedByUndo.add(ci);
               continue;
             }
 
-            if (c.text !== '' && changeStart <= range.endLine && changeEnd >= range.startLine) {
+            if (c.text.trim() === '') {
+              if (changeEnd < range.startLine) {
+                range.startLine += lineDelta;
+                range.endLine += lineDelta;
+              } else if (changeStart <= range.endLine && changeEnd >= range.startLine) {
+                this.adjustRangeForWhitespaceChange(c, range, lineDelta);
+              }
+              continue;
+            }
+
+            if (changeStart <= range.endLine && changeEnd >= range.startLine) {
+              if (this.isManualNonEmptyInsertOnEmptyLine(c, previousLines)) {
+                continue;
+              }
+
               consumedByUndo.add(ci);
               modified = true;
               const touchedStart = Math.max(changeStart, range.startLine);
@@ -241,5 +260,34 @@ export class EventListenerModule {
 
   private countNonEmptyLines(lines: string[]): number {
     return lines.filter((line) => line.trim() !== '').length;
+  }
+
+  private adjustRangeForWhitespaceChange(
+    change: vscode.TextDocumentContentChangeEvent,
+    range: TrackedRange,
+    lineDelta: number
+  ): void {
+    if (lineDelta <= 0) {
+      range.endLine = Math.max(range.startLine, range.endLine + lineDelta);
+      return;
+    }
+
+    const addsLineAtRangeEnd =
+      change.range.isEmpty && change.range.start.line >= range.endLine;
+    if (!addsLineAtRangeEnd) {
+      range.endLine = Math.max(range.startLine, range.endLine + lineDelta);
+    }
+  }
+
+  private isManualNonEmptyInsertOnEmptyLine(
+    change: vscode.TextDocumentContentChangeEvent,
+    previousLines: readonly string[]
+  ): boolean {
+    if (!change.range.isEmpty || change.text.trim() === '') {
+      return false;
+    }
+
+    const previousLine = previousLines[change.range.start.line] ?? '';
+    return previousLine.trim() === '';
   }
 }

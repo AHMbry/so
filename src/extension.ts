@@ -16,6 +16,7 @@ import { SessionTracker } from './business/sessionTracker';
 import { BRICalculator } from './business/briCalculator';
 import { ModeManager } from './business/modeManager';
 import { AlertController } from './business/alertController';
+import { buildAlertMessage } from './business/alertMessageBuilder';
 import { SidebarPanel } from './presentation/sidebarPanel';
 import { DashboardPanel } from './presentation/dashboardPanel';
 import { ReportGenerator } from './business/reportGenerator';
@@ -115,7 +116,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // NF-06: neutral language only — no punishment words
       vscode.window
         .showWarningMessage(
-          `Bounded: Your reliance index is ${label}. Consider writing the next block yourself.`,
+          buildAlertMessage(label, modeManager.getMode(), sessionTracker.getSnapshot()),
           'Dismiss',
           'Open Dashboard'
         )
