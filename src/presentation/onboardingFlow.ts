@@ -17,7 +17,6 @@ export class OnboardingFlow {
   }
 
   public show(): void {
-    if (this.isComplete()) { return; }
 
     this.panel = vscode.window.createWebviewPanel(
       OnboardingFlow.viewType,
